@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { PixelCanvas } from '@/components/ui/pixel-canvas'
 import { Spotlight } from '@/components/ui/spotlight'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +30,15 @@ export function MissionCard({ title, reason, firstStep, meta, actions, className
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
         <Spotlight className="-top-40 left-0 md:-top-20 md:left-40" fill="oklch(0.85 0.19 138)" />
       </div>
+      {/* Direct child of the card so trackParent listens to the whole card; decorative only. */}
+      <PixelCanvas
+        aria-hidden="true"
+        trackParent
+        variant="trail"
+        gap={9}
+        speed={0.025}
+        className="pointer-events-none absolute inset-0 -z-10 opacity-50"
+      />
       {meta && <div className="mb-4 flex flex-wrap gap-2">{meta}</div>}
       <h2 className="text-2xl font-semibold tracking-tight text-balance">{title}</h2>
       {reason && <p className="mt-2 text-muted-foreground">{reason}</p>}

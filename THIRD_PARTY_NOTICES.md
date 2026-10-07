@@ -14,3 +14,12 @@ Notable dependencies and copied source components. Everything listed must be fre
 | Cult UI `halo-button` (src/components/ui/halo-button.tsx) | MIT | Depends on @base-ui/react (MIT); gradient recolored to the green palette |
 | Aceternity UI `spotlight` (src/components/ui/spotlight.tsx) | Free component (Aceternity free tier) | Keyframes added in src/index.css; only free-tier items are used |
 | @base-ui/react | MIT | Button primitive used by halo-button |
+| Componentry `infinite-image-field` (src/components/ui/infinite-image-field.tsx) | MIT | Patched: self-hosted photos, pointer/touch idle drift, reduced-motion + off-screen pause, neighbour-safe tiling |
+| Componentry `pixel-canvas` (src/components/ui/pixel-canvas.tsx) | MIT | Patched: stable green palette, sleeps when idle, reduced-motion, new `trackParent` prop |
+
+## Photography
+
+Photos in `public/photos/field-01..10.webp` are from Unsplash, used under the [Unsplash License](https://unsplash.com/license) (free to use, no attribution required). Resized/recompressed to 400x560 WebP. Source photo IDs:
+1506905925346-21bda4d32df4, 1469474968028-56623f02e42e, 1433086966358-54859d0ed716, 1501854140801-50d01698950b, 1464822759023-fed622ff2c3b, 1500534314209-a25ddb2bd429, 1440342359743-84fcb8c21f21, 1511884642898-4c92249e20b6, 1448375240586-882707db888b, 1542273917363-3b1817f69a2d.
+Unsplash+ (premium) images are NOT used. A pink/purple galaxy image from the component's defaults was dropped for palette reasons.
+

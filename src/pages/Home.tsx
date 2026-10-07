@@ -1,9 +1,12 @@
-import { Clock, Sun } from 'lucide-react'
+import { Navigate } from 'react-router-dom'
+import { hasSeenWelcome } from '@/lib/welcome'
+import { Clock } from 'lucide-react'
 import { MissionCard } from '@/components/tg/MissionCard'
 import { PrimaryAction } from '@/components/tg/PrimaryAction'
 import { ContextPill } from '@/components/tg/ContextPill'
 
 export default function Home() {
+  if (!hasSeenWelcome()) return <Navigate to="/welcome" replace />
   return (
     <section className="space-y-6">
       <div>
@@ -15,12 +18,7 @@ export default function Home() {
       <MissionCard
         title="Your next mission will appear here"
         reason="Tell us what moves you, then tap the button. We'll pick one thing worth leaving the screen for."
-        meta={
-          <>
-            <ContextPill icon={Clock}>Next hour</ContextPill>
-            <ContextPill icon={Sun}>Weather-aware</ContextPill>
-          </>
-        }
+        meta={<ContextPill icon={Clock}>Next hour</ContextPill>}
         actions={<PrimaryAction disabled>Plan my next hour</PrimaryAction>}
       />
     </section>
