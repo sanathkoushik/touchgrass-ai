@@ -21,5 +21,9 @@
   },
   "menuColor": "default",
   "menuAccent": "subtle",
-  "registries": {}
+  "registries": {
+    "@componentry": "https://componentry.dev/r/{name}.json",
+    "@cult-ui": "https://www.cult-ui.com/r/{name}.json",
+    "@aceternity": "https://ui.aceternity.com/registry/{name}.json"
+  }
 }
