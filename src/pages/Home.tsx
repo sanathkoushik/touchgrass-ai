@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/button'
+import { HaloButton } from '@/components/ui/halo-button'
 
 export default function Home() {
   return (
@@ -11,9 +11,9 @@ export default function Home() {
       </div>
       <div className="rounded-xl border bg-card p-6">
         <p className="text-sm text-muted-foreground">Your mission will appear here.</p>
-        <Button className="mt-4" disabled>
+        <HaloButton className="mt-4" disabled>
           Plan my next hour
-        </Button>
+        </HaloButton>
       </div>
     </section>
   )
