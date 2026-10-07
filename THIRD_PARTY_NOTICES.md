@@ -9,6 +9,7 @@ Notable dependencies and copied source components. Everything listed must be fre
 | shadcn/ui (source copied into `src/components/ui`) | MIT | Base components |
 | Motion | MIT | Animation |
 | Geist font (`@fontsource-variable/geist`) | OFL-1.1 | Typography |
+| Fraunces font (`@fontsource-variable/fraunces`, optical-size cut) | OFL-1.1 | Display headlines only |
 | Lucide icons | ISC | Icons |
 | Componentry `magnetic-dock` (src/components/ui/magnetic-dock.tsx) | MIT | Imports changed from framer-motion to motion/react; colors converted to theme tokens |
 | Cult UI `halo-button` (src/components/ui/halo-button.tsx) | MIT | Depends on @base-ui/react (MIT); gradient recolored to the green palette |
@@ -16,6 +17,7 @@ Notable dependencies and copied source components. Everything listed must be fre
 | @base-ui/react | MIT | Button primitive used by halo-button |
 | Componentry `infinite-image-field` (src/components/ui/infinite-image-field.tsx) | MIT | Patched: self-hosted photos, pointer/touch idle drift, reduced-motion + off-screen pause, neighbour-safe tiling |
 | Componentry `pixel-canvas` (src/components/ui/pixel-canvas.tsx) | MIT | Patched: stable green palette, sleeps when idle, reduced-motion, new `trackParent` prop |
+| Componentry `scroll-based-velocity` (src/components/ui/scroll-based-velocity.tsx) | MIT | Patched: motion/react instead of framer-motion, wheel/swipe input for a non-scrolling hero, real skew, reduced-motion, separate second-row text/style, aria-label |
 
 ## Photography
 

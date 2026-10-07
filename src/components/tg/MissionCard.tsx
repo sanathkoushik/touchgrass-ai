@@ -40,7 +40,7 @@ export function MissionCard({ title, reason, firstStep, meta, actions, className
         className="pointer-events-none absolute inset-0 -z-10 opacity-50"
       />
       {meta && <div className="mb-4 flex flex-wrap gap-2">{meta}</div>}
-      <h2 className="text-2xl font-semibold tracking-tight text-balance">{title}</h2>
+      <h2 className="font-display text-2xl font-medium tracking-tight text-balance">{title}</h2>
       {reason && <p className="mt-2 text-muted-foreground">{reason}</p>}
       {firstStep && (
         <div className="mt-5 rounded-xl border bg-background/50 p-4 backdrop-blur-sm">
