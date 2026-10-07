@@ -21,6 +21,8 @@ interface ScrollBasedVelocityProps {
     /** Extra classes for the second row only (e.g. an outlined style). */
     secondClassName?: string;
     default_velocity?: number;
+    /** Resting speed in screen pixels per second; keeps the pace identical at every screen size. */
+    pixelsPerSecond?: number;
     className?: string;
     containerRef?: React.RefObject<HTMLElement | null>;
 }
@@ -30,12 +32,26 @@ interface ParallaxProps {
     still?: boolean;
     children: string;
     baseVelocity: number;
+    /** Resting speed in screen pixels per second (sign = direction). Overrides baseVelocity's size. */
+    pixelsPerSecond?: number;
     className?: string;
     containerRef?: React.RefObject<HTMLElement | null>;
 }
 
-function ParallaxText({ children, baseVelocity = 100, className, containerRef, still }: ParallaxProps) {
+function ParallaxText({ children, baseVelocity = 100, pixelsPerSecond, className, containerRef, still }: ParallaxProps) {
     const baseX = useMotionValue(0);
+    // Total width of the moving strip, so a pixel speed can be converted to the %-based transform.
+    const stripRef = useRef<HTMLDivElement>(null);
+    const stripWidth = useRef(0);
+    useEffect(() => {
+        const el = stripRef.current;
+        if (!el) return;
+        const measure = () => { stripWidth.current = el.getBoundingClientRect().width; };
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [children]);
     const { scrollY } = useScroll(containerRef ? { container: containerRef } : undefined);
     // The hero does not scroll, so wheel and swipe gestures also drive the velocity.
     const gestureY = useMotionValue(0);
@@ -80,7 +96,12 @@ function ParallaxText({ children, baseVelocity = 100, className, containerRef, s
     const directionFactor = useRef<number>(1);
     useAnimationFrame((_t, delta) => {
         if (still) return;
-        let moveBy = directionFactor.current * baseVelocity * (delta / 1000);
+        // Resting speed as a % of the strip per second. With pixelsPerSecond the pace is the same on every screen size.
+        const restingPct =
+            pixelsPerSecond !== undefined && stripWidth.current > 0
+                ? (Math.abs(pixelsPerSecond) / stripWidth.current) * 100 * Math.sign(pixelsPerSecond)
+                : baseVelocity;
+        let moveBy = directionFactor.current * restingPct * (delta / 1000);
 
         /**
          * This is what changes the direction of the scroll once we
@@ -100,6 +121,7 @@ function ParallaxText({ children, baseVelocity = 100, className, containerRef, s
     return (
         <div className="overflow-hidden whitespace-nowrap flex flex-nowrap" style={{ width: '100%' }}>
             <motion.div
+                ref={stripRef}
                 className={cn("flex whitespace-nowrap", className)}
                 style={{ x, skewX }}
             >
@@ -116,6 +138,7 @@ export function ScrollBasedVelocity({
     secondText,
     secondClassName,
     default_velocity = 5,
+    pixelsPerSecond,
     className,
     containerRef,
 }: ScrollBasedVelocityProps) {
@@ -123,11 +146,11 @@ export function ScrollBasedVelocity({
     return (
         // Decorative: screen readers get the text once via aria-label instead of 16 repeated copies.
         <section className="relative flex w-full flex-col gap-[0.28em]" role="img" aria-label={secondText ? `${text} ${secondText}` : text}>
-            <ParallaxText baseVelocity={default_velocity} className={className} containerRef={containerRef} still={reduce}>
+            <ParallaxText baseVelocity={default_velocity} pixelsPerSecond={pixelsPerSecond} className={className} containerRef={containerRef} still={reduce}>
                 {text}
             </ParallaxText>
             {secondText !== undefined && (
-                <ParallaxText baseVelocity={-default_velocity} className={cn(className, secondClassName)} containerRef={containerRef} still={reduce}>
+                <ParallaxText baseVelocity={-default_velocity} pixelsPerSecond={pixelsPerSecond === undefined ? undefined : -pixelsPerSecond} className={cn(className, secondClassName)} containerRef={containerRef} still={reduce}>
                     {secondText}
                 </ParallaxText>
             )}

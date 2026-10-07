@@ -60,21 +60,21 @@ export default function Home() {
         </main>
       </section>
 
-      {/* ---- bottom 1/4: one line of moving text along the very bottom, running BEHIND the dock ---- */}
-      <section className="relative z-10 flex basis-1/4 flex-col justify-end">
-        {/* Same height and offset as the dock row, so the text is vertically centred on the dock.
-            It sits below the dock in the stacking order and never receives pointer events. */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-4 flex h-[68px] items-center overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
-          <div className="w-full text-[clamp(1.6rem,6.2svh,3.4rem)] leading-[1.1]">
+      {/* ---- bottom 1/4: dock on top, one slow line of text along the very bottom (separate rows: no overlap) ---- */}
+      <section className="relative z-10 flex min-h-[9.5rem] basis-1/4 flex-col justify-end">
+        <div className="relative z-10 pb-2">
+          <DockNav inline />
+        </div>
+        <div
+          className="pointer-events-none mb-3 flex h-14 shrink-0 items-center overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]"
+        >
+          <div className="w-full text-[clamp(1.5rem,5.6svh,3rem)] leading-[1.1]">
             <ScrollBasedVelocity
               text={TICKER}
-              default_velocity={3}
+              pixelsPerSecond={65}
               className="font-display font-medium tracking-tight text-foreground/80"
             />
           </div>
-        </div>
-        <div className="relative z-10 pb-4">
-          <DockNav inline />
         </div>
       </section>
     </div>
