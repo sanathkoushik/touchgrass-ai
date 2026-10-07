@@ -5,34 +5,43 @@
 
 export type Family = 'movement' | 'exploration' | 'social_skill'
 
-/** Who an activity can be done with. An activity may support several modes. */
-export type SocialMode = 'solo' | 'with_friend' | 'small_group'
+// The runtime arrays below are the single source of truth: the types are derived from them,
+// and the API validation (zod) reuses them, so the two can never drift apart.
 
-export type SocialPreference = SocialMode | 'any'
+/** Who an activity can be done with. An activity may support several modes. */
+export const SOCIAL_MODES = ['solo', 'with_friend', 'small_group'] as const
+export type SocialMode = (typeof SOCIAL_MODES)[number]
+
+export const SOCIAL_PREFERENCES = [...SOCIAL_MODES, 'any'] as const
+export type SocialPreference = (typeof SOCIAL_PREFERENCES)[number]
 
 /** Gear an activity needs. Phone, shoes and clothes are assumed; only list real extras. */
-export type Equipment =
-  | 'bicycle'
-  | 'racket'
-  | 'ball'
-  | 'swimwear'
-  | 'yoga_mat'
-  | 'sketchbook'
-  | 'cards'
-  | 'trash_bag'
+export const EQUIPMENT = [
+  'bicycle',
+  'racket',
+  'ball',
+  'swimwear',
+  'yoga_mat',
+  'sketchbook',
+  'cards',
+  'trash_bag',
+] as const
+export type Equipment = (typeof EQUIPMENT)[number]
 
-export type Motivator =
-  | 'novelty'
-  | 'social'
-  | 'exploration'
-  | 'mastery'
-  | 'competition'
-  | 'calm'
-  | 'creativity'
-  | 'nature'
-  | 'purpose'
-  | 'music'
-  | 'food'
+export const MOTIVATORS = [
+  'novelty',
+  'social',
+  'exploration',
+  'mastery',
+  'competition',
+  'calm',
+  'creativity',
+  'nature',
+  'purpose',
+  'music',
+  'food',
+] as const
+export type Motivator = (typeof MOTIVATORS)[number]
 
 /** Existing enjoyable things that can ride along (temptation bundling). */
 export type Bundle = 'music' | 'podcast' | 'audiobook' | 'call' | 'photo'
@@ -88,7 +97,8 @@ export interface Preferences {
   social_preference: SocialPreference
 }
 
-export type Avoidance = 'too_far' | 'high_cost'
+export const AVOIDANCES = ['too_far', 'high_cost'] as const
+export type Avoidance = (typeof AVOIDANCES)[number]
 
 export interface UserProfile {
   user_id: string
@@ -99,17 +109,20 @@ export interface UserProfile {
   equipment: Equipment[]
 }
 
-export type Outcome = 'completed' | 'partial' | 'skipped' | 'changed'
+export const OUTCOMES = ['completed', 'partial', 'skipped', 'changed'] as const
+export type Outcome = (typeof OUTCOMES)[number]
 
-export type SkipReason =
-  | 'too_tired'
-  | 'too_far'
-  | 'no_time'
-  | 'bad_weather'
-  | 'no_friend'
-  | 'too_costly'
-  | 'boring'
-  | 'other'
+export const SKIP_REASONS = [
+  'too_tired',
+  'too_far',
+  'no_time',
+  'bad_weather',
+  'no_friend',
+  'too_costly',
+  'boring',
+  'other',
+] as const
+export type SkipReason = (typeof SKIP_REASONS)[number]
 
 /** One past recommendation and what happened with it. */
 export interface HistoryEvent {
@@ -131,7 +144,8 @@ export interface Weather {
   temp_c: number
 }
 
-export type Mood = 'low' | 'ok' | 'high'
+export const MOODS = ['low', 'ok', 'high'] as const
+export type Mood = (typeof MOODS)[number]
 
 export interface Context {
   /** Minutes the user has. */
@@ -179,6 +193,8 @@ export interface ScoredActivity {
     observed_done: number
     declared_like: string | null
     recently_suggested: boolean
+    /** How many past events existed when scoring. Zero means "no history", so no claims about it. */
+    history_size: number
   }
 }
 

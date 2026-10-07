@@ -385,6 +385,15 @@ describe('explanations only state facts we have', () => {
     expect(recommendation.reason).not.toMatch(/finished|you said you like|worked for you/i)
   })
 
+  it('never mentions "recent picks" when there is no history at all', () => {
+    // A novelty-loving profile, so the novelty sentence would otherwise be tempting.
+    const p = baseProfile({ motivators: ['novelty'], preferences: { ...baseProfile().preferences, likes: ['exploring'] } })
+    for (const mood of ['low', 'ok', 'high'] as const) {
+      const { recommendation } = planDeterministic(p, baseCtx({ mood, duration_limit: 90 }), [])
+      expect(recommendation.reason).not.toMatch(/recent picks/i)
+    }
+  })
+
   it('mentions a friend only when one is actually free', () => {
     const p = baseProfile({ preferences: { ...baseProfile().preferences, social_preference: 'small_group' }, equipment: ['racket'] })
     const free = planDeterministic(p, baseCtx({ social_available: true })).recommendation.reason

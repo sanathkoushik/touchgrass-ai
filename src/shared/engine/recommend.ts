@@ -67,7 +67,8 @@ export function explain(scored: ScoredActivity, ctx: Context): string {
   }
   if (evidence.declared_like) parts.push(`You said you like ${evidence.declared_like}.`)
   if (ctx.social_available && components.social_fit >= 0.5) parts.push('Someone is free to join you.')
-  if (!evidence.recently_suggested && activity.novelty >= 2 && components.novelty > 0.2) {
+  // "Fresh compared to your recent picks" is only true if there ARE recent picks.
+  if (evidence.history_size > 0 && !evidence.recently_suggested && activity.novelty >= 2 && components.novelty > 0.2) {
     parts.push('It is a fresh change from your recent picks.')
   }
   if (ctx.mood === 'low' && activity.intensity === 1) parts.push('It is gentle, which suits a low-energy moment.')

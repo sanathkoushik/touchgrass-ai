@@ -9,6 +9,10 @@ Notable dependencies and copied source components. Everything listed must be fre
 | shadcn/ui (source copied into `src/components/ui`) | MIT | Base components |
 | Motion | MIT | Animation |
 | Geist font (`@fontsource-variable/geist`) | OFL-1.1 | Typography |
+| Hono, @hono/zod-validator | MIT | Worker API framework / request validation |
+| Zod | MIT | Schema validation (shared by Worker and app) |
+| @cloudflare/vite-plugin, Wrangler | MIT / Apache-2.0 | Worker runtime in dev, build and deploy tooling |
+| Vitest | MIT | Test runner |
 | Fraunces font (`@fontsource-variable/fraunces`, optical-size cut) | OFL-1.1 | Display headlines only |
 | Lucide icons | ISC | Icons |
 | Componentry `magnetic-dock` (src/components/ui/magnetic-dock.tsx) | MIT | Imports changed from framer-motion to motion/react; colors converted to theme tokens |

@@ -297,6 +297,7 @@ export function scoreActivities(
         observed_done: own.filter((e) => e.outcome === 'completed').length,
         declared_like: pref.like,
         recently_suggested: nov.recentlySuggested,
+        history_size: ordered.length,
       },
     }
   })

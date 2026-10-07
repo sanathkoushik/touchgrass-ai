@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "touchgrass-ai",
+  "main": "./src/worker/index.ts",
+  "compatibility_date": "2026-10-07",
+  "observability": { "enabled": true },
+  "assets": {
+    // Unknown paths fall back to index.html so React Router handles them.
+    "not_found_handling": "single-page-application",
+    // Always run the Worker for API calls, even for a browser "navigation" request,
+    // so /api/* can never be answered with index.html.
+    "run_worker_first": ["/api/*", "/health"]
+  }
+}

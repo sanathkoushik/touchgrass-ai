@@ -27,3 +27,11 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - `doorstep_reset` is the guaranteed fallback; never remove it from the catalog.
 - Reasons shown to users must be derived from real evidence in `ScoredActivity.evidence`; never invent claims.
 - Run tests with `npm test` (vitest). Test fixtures are synthetic and must never appear in the UI.
+
+## Worker / API (src/worker, src/shared/api.ts)
+- Hono app in `src/worker/app.ts` (`createApp({ repo, now })`); entry `src/worker/index.ts`. Contract + zod schemas in `src/shared/api.ts`. Docs: docs/API.md.
+- Server code is checked by `tsconfig.worker.json` (no DOM lib). Never use browser APIs there. Re-run `npm run cf-typegen` after editing wrangler.jsonc bindings.
+- Storage goes through the `Repository` interface only. Never touch a database from a route handler directly.
+- API errors are always `{ error: { code, message, details? } }`. Never return raw exception text.
+- Unit tests run in Node (`vitest.config.ts`, no Cloudflare plugin). For real-runtime checks run `npm run dev -- --port 5188` and curl it.
+- Never log request bodies, headers or session ids.
