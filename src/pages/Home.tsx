@@ -9,8 +9,8 @@ const InfiniteImageField = lazy(() =>
   import('@/components/ui/infinite-image-field').then((m) => ({ default: m.InfiniteImageField })),
 )
 
-const LINE_ONE = 'Touch grass — Go outside — Feel the sun on your face — One more block — '
-const LINE_TWO = 'Phone down, head up — Chase the golden hour — Walk it off — Say yes to the park — '
+const TICKER =
+  'Touch grass — Go outside — Feel the sun on your face — Phone down, head up — Chase the golden hour — One more block — Walk it off — Say yes to the park — '
 
 /**
  * First screen. Three quarters of the viewport is a drifting field of real outdoor photographs
@@ -60,20 +60,20 @@ export default function Home() {
         </main>
       </section>
 
-      {/* ---- bottom 1/4: moving text on top, dock below (separate rows, so they never overlap) ---- */}
-      <section className="relative z-10 flex basis-1/4 flex-col">
-        <div className="pointer-events-none flex min-h-0 flex-1 items-center overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_10%,black_90%,transparent)]">
-          <div className="w-full text-[clamp(1rem,3.3svh,2.15rem)] leading-[1.1]">
+      {/* ---- bottom 1/4: one line of moving text along the very bottom, running BEHIND the dock ---- */}
+      <section className="relative z-10 flex basis-1/4 flex-col justify-end">
+        {/* Same height and offset as the dock row, so the text is vertically centred on the dock.
+            It sits below the dock in the stacking order and never receives pointer events. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-4 flex h-[68px] items-center overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
+          <div className="w-full text-[clamp(1.6rem,6.2svh,3.4rem)] leading-[1.1]">
             <ScrollBasedVelocity
-              text={LINE_ONE}
-              secondText={LINE_TWO}
+              text={TICKER}
               default_velocity={3}
-              className="font-display font-medium tracking-tight text-foreground/85"
-              secondClassName="text-transparent [-webkit-text-stroke:1px_color-mix(in_oklch,var(--primary)_60%,transparent)]"
+              className="font-display font-medium tracking-tight text-foreground/80"
             />
           </div>
         </div>
-        <div className="shrink-0 pt-1 pb-4">
+        <div className="relative z-10 pb-4">
           <DockNav inline />
         </div>
       </section>

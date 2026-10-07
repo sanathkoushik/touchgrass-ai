@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 interface ScrollBasedVelocityProps {
     text: string;
-    /** Text for the second, counter-moving row. Defaults to `text`. */
+    /** Optional second, counter-moving row. Omit it for a single line. */
     secondText?: string;
     /** Extra classes for the second row only (e.g. an outlined style). */
     secondClassName?: string;
@@ -126,9 +126,11 @@ export function ScrollBasedVelocity({
             <ParallaxText baseVelocity={default_velocity} className={className} containerRef={containerRef} still={reduce}>
                 {text}
             </ParallaxText>
-            <ParallaxText baseVelocity={-default_velocity} className={cn(className, secondClassName)} containerRef={containerRef} still={reduce}>
-                {secondText ?? text}
-            </ParallaxText>
+            {secondText !== undefined && (
+                <ParallaxText baseVelocity={-default_velocity} className={cn(className, secondClassName)} containerRef={containerRef} still={reduce}>
+                    {secondText}
+                </ParallaxText>
+            )}
         </section>
     );
 }
