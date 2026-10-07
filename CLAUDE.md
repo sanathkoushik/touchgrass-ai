@@ -20,3 +20,10 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Dev server: `npm run dev -- --port 5199` (5173 is used by another app on this machine).
 - Secrets only server-side; never commit .env / .dev.vars.
 - List any notable new dependency/component license in THIRD_PARTY_NOTICES.md.
+
+## Engine (src/shared/engine)
+- Pure TypeScript, no browser/Worker APIs: shared by the React app, the Worker and tests.
+- Pipeline: `filterActivities` (hard constraints, explains rejections) -> `scoreActivities` (observed behaviour overrides stated likes) -> `planDeterministic` (always returns a recommendation with no AI).
+- `doorstep_reset` is the guaranteed fallback; never remove it from the catalog.
+- Reasons shown to users must be derived from real evidence in `ScoredActivity.evidence`; never invent claims.
+- Run tests with `npm test` (vitest). Test fixtures are synthetic and must never appear in the UI.
