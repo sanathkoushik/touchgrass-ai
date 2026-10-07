@@ -1,4 +1,7 @@
-import { HaloButton } from '@/components/ui/halo-button'
+import { Clock, Sun } from 'lucide-react'
+import { MissionCard } from '@/components/tg/MissionCard'
+import { PrimaryAction } from '@/components/tg/PrimaryAction'
+import { ContextPill } from '@/components/tg/ContextPill'
 
 export default function Home() {
   return (
@@ -9,12 +12,17 @@ export default function Home() {
           One real-world mission, picked for you. Then leave the screen.
         </p>
       </div>
-      <div className="rounded-xl border bg-card p-6">
-        <p className="text-sm text-muted-foreground">Your mission will appear here.</p>
-        <HaloButton className="mt-4" disabled>
-          Plan my next hour
-        </HaloButton>
-      </div>
+      <MissionCard
+        title="Your next mission will appear here"
+        reason="Tell us what moves you, then tap the button. We'll pick one thing worth leaving the screen for."
+        meta={
+          <>
+            <ContextPill icon={Clock}>Next hour</ContextPill>
+            <ContextPill icon={Sun}>Weather-aware</ContextPill>
+          </>
+        }
+        actions={<PrimaryAction disabled>Plan my next hour</PrimaryAction>}
+      />
     </section>
   )
 }

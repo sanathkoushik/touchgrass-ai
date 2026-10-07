@@ -1,0 +1,22 @@
+# TouchGrass AI — project rules
+
+Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Success is the user leaving the screen; never optimize time-in-app.
+
+## TouchGrass UI rules
+1. Use shadcn/ui as the base system.
+2. Prefer free/public Componentry, Cult UI and Aceternity registry items.
+3. Never add a Pro-only component.
+4. Install components through shadcn rather than copying random snippets.
+5. Keep the first viewport lightweight.
+6. Lazy-load WebGL, shader, particle and 3D effects.
+7. Respect prefers-reduced-motion.
+8. Never block initial render on API, AI or database calls.
+9. Every UI addition must pass `npm run build` and a mobile/desktop smoke test.
+10. Prefer one polished interaction over ten competing effects.
+
+## Conventions
+- Single animation runtime: import from `motion/react` (never add `framer-motion`).
+- Use theme tokens (bg-card, text-primary, border-border...), not hard-coded colors.
+- Dev server: `npm run dev -- --port 5199` (5173 is used by another app on this machine).
+- Secrets only server-side; never commit .env / .dev.vars.
+- List any notable new dependency/component license in THIRD_PARTY_NOTICES.md.
