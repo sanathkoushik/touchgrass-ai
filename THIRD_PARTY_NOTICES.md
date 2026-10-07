@@ -10,7 +10,7 @@ Notable dependencies and copied source components. Everything listed must be fre
 | Motion | MIT | Animation |
 | Geist font (`@fontsource-variable/geist`) | OFL-1.1 | Typography |
 | Lucide icons | ISC | Icons |
-| Componentry  (src/components/ui/magnetic-dock.tsx) | MIT | Imports changed from framer-motion to motion/react; colors converted to theme tokens |
-| Cult UI  (src/components/ui/halo-button.tsx) | MIT | Depends on @base-ui/react (MIT); gradient recolored to the green palette |
-| Aceternity UI  (src/components/ui/spotlight.tsx) | Free component (Aceternity free tier) | Keyframes added in src/index.css; only free-tier items are used |
+| Componentry `magnetic-dock` (src/components/ui/magnetic-dock.tsx) | MIT | Imports changed from framer-motion to motion/react; colors converted to theme tokens |
+| Cult UI `halo-button` (src/components/ui/halo-button.tsx) | MIT | Depends on @base-ui/react (MIT); gradient recolored to the green palette |
+| Aceternity UI `spotlight` (src/components/ui/spotlight.tsx) | Free component (Aceternity free tier) | Keyframes added in src/index.css; only free-tier items are used |
 | @base-ui/react | MIT | Button primitive used by halo-button |
