@@ -12,7 +12,11 @@
     "test:watch": "vitest",
     "cf-typegen": "wrangler types",
     "deploy": "npm run build && wrangler deploy",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "db:migrate:local": "node scripts/migrate-local.mjs",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "predev": "node scripts/migrate-local.mjs",
+    "db:reset:local": "wrangler d1 execute DB --local --command \"DELETE FROM events; DELETE FROM profiles;\""
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

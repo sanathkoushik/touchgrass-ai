@@ -4,6 +4,16 @@
   "main": "./src/worker/index.ts",
   "compatibility_date": "2026-10-07",
   "observability": { "enabled": true },
+  // Persistent storage for profiles and history. Local dev uses a built-in emulation (no login needed).
+  // Before the first deploy: run `npx wrangler d1 create touchgrass-db` and paste the database_id below.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "touchgrass-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
   "assets": {
     // Unknown paths fall back to index.html so React Router handles them.
     "not_found_handling": "single-page-application",

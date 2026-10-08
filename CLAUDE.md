@@ -35,3 +35,10 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - API errors are always `{ error: { code, message, details? } }`. Never return raw exception text.
 - Unit tests run in Node (`vitest.config.ts`, no Cloudflare plugin). For real-runtime checks run `npm run dev -- --port 5188` and curl it.
 - Never log request bodies, headers or session ids.
+
+## Database (Stage 6)
+- Storage is Cloudflare D1 (binding `DB`), NOT MongoDB: see docs/DECISIONS.md before changing this.
+- Schema changes are new numbered files in `migrations/` (never edit an applied one). `npm run dev` applies them locally; `npm run db:migrate:remote` applies them to production (needs a Cloudflare login).
+- Every SQL statement uses `?` + `.bind()`; every query is scoped by `user_key`. Never build SQL from strings.
+- Any new `Repository` method must be added to `repository.contract.test.ts` and pass on both Memory and D1.
+- Free-tier budget: 100k rows written/day. Avoid per-request writes that are not needed.

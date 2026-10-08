@@ -10,8 +10,7 @@ Hono on a Cloudflare Worker. Source: `src/worker/`. Contract (validation + types
 - **Errors:** always JSON: `{ "error": { "code": "...", "message": "...", "details?": [{ "path", "message" }] } }`.
 - **Validation:** strict. Unknown fields are rejected (400), not ignored. Bodies are capped at 16 KB (413).
 - **Caching:** all API responses are `Cache-Control: no-store`.
-- **Storage:** in-memory for now (per Worker instance, lost on restart). Stage 6 replaces it with MongoDB Atlas behind the
-  same `Repository` interface.
+- **Storage:** Cloudflare D1 (binding `DB`) behind the `Repository` interface. Schema: `migrations/`. Why D1 and not MongoDB: `docs/DECISIONS.md`.
 
 ## Endpoints
 
@@ -52,9 +51,10 @@ A session can only answer its own recommendations.
 ## Local testing
 
 ```
-npm run dev -- --port 5188      # Vite + the Worker in the real workerd runtime
+npm run dev -- --port 5188      # applies local DB migrations, then runs Vite + the Worker in the real workerd runtime
 curl http://localhost:5188/health
-npm test                        # engine + API tests (Node)
+npm test                        # engine, repository-contract and API tests (API + contract run on memory AND real local D1)
+npm run db:reset:local          # wipe the local dev database
 ```
 
 ## Decisions worth remembering

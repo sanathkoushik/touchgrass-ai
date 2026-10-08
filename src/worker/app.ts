@@ -26,7 +26,8 @@ import type { Repository, StoredEvent } from './repository'
 import { localClock, offsetFromTimeZone } from './time'
 
 export interface AppDeps {
-  repo: Repository
+  /** A repository, or a factory that builds one from the request's bindings (e.g. env.DB). */
+  repo: Repository | ((env: Env) => Repository)
   /** Injectable clock so tests can control the time of day. */
   now?: () => Date
 }
@@ -121,8 +122,9 @@ function resolveOffsetMinutes(c: HonoContext<AppEnv>, clientOffset: number | und
 
 // ---------------------------------------------------------------------- app
 
-export function createApp({ repo, now = () => new Date() }: AppDeps) {
+export function createApp({ repo: repoSource, now = () => new Date() }: AppDeps) {
   const app = new Hono<AppEnv>()
+  const repoOf = (c: HonoContext<AppEnv>): Repository => (typeof repoSource === 'function' ? repoSource(c.env) : repoSource)
 
   app.use('*', secureHeaders())
 
@@ -159,6 +161,7 @@ export function createApp({ repo, now = () => new Date() }: AppDeps) {
 
   // ---- onboarding: create or replace the profile
   app.post('/api/onboarding', validate('json', profileInputSchema), async (c) => {
+    const repo = repoOf(c)
     const input = c.req.valid('json')
     const profile = toStoredProfile(input, now())
     await repo.saveProfile(c.get('userKey'), profile)
@@ -168,6 +171,7 @@ export function createApp({ repo, now = () => new Date() }: AppDeps) {
 
   // ---- profile: read / partial update / delete
   app.get('/api/profile', async (c) => {
+    const repo = repoOf(c)
     const userKey = c.get('userKey')
     const profile = await repo.getProfile(userKey)
     if (!profile) return c.json(errorBody('profile_not_found', 'No profile yet. Complete onboarding first.'), 404)
@@ -176,6 +180,7 @@ export function createApp({ repo, now = () => new Date() }: AppDeps) {
   })
 
   app.patch('/api/profile', validate('json', profilePatchSchema), async (c) => {
+    const repo = repoOf(c)
     const userKey = c.get('userKey')
     const existing = await repo.getProfile(userKey)
     if (!existing) return c.json(errorBody('profile_not_found', 'No profile yet. Complete onboarding first.'), 404)
@@ -194,12 +199,14 @@ export function createApp({ repo, now = () => new Date() }: AppDeps) {
   })
 
   app.delete('/api/profile', async (c) => {
+    const repo = repoOf(c)
     await repo.deleteUser(c.get('userKey'))
     return c.json({ deleted: true })
   })
 
   // ---- recommend: filter -> score -> deterministic plan (Gemma joins in a later stage)
   app.post('/api/recommend', validate('json', recommendInputSchema), async (c) => {
+    const repo = repoOf(c)
     const userKey = c.get('userKey')
     const input = c.req.valid('json')
 
@@ -240,6 +247,7 @@ export function createApp({ repo, now = () => new Date() }: AppDeps) {
 
   // ---- feedback: record what happened
   app.post('/api/feedback', validate('json', feedbackInputSchema), async (c) => {
+    const repo = repoOf(c)
     const userKey = c.get('userKey')
     const input = c.req.valid('json')
 
@@ -265,6 +273,7 @@ export function createApp({ repo, now = () => new Date() }: AppDeps) {
 
   // ---- history: recent recommendations and outcomes
   app.get('/api/history', validate('query', historyQuerySchema), async (c) => {
+    const repo = repoOf(c)
     const { limit } = c.req.valid('query')
     const events = await repo.listEvents(c.get('userKey'), limit)
     const body: HistoryResponse = {

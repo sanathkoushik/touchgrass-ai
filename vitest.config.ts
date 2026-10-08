@@ -10,5 +10,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // The D1 tests start a real (local) workerd via Miniflare.
+    hookTimeout: 60_000,
+    testTimeout: 30_000,
   },
 })

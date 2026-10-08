@@ -63,6 +63,8 @@ export class MemoryRepository implements Repository {
 
   async addEvent(userKey: string, event: StoredEvent) {
     const list = this.events.get(userKey) ?? []
+    // Same rule as the database primary key (user_key, recommendation_id).
+    if (list.some((x) => x.recommendation_id === event.recommendation_id)) throw new Error('duplicate recommendation id')
     list.push(structuredClone(event))
     // Bound memory: drop the oldest events beyond the cap.
     if (list.length > MAX_EVENTS_PER_USER) list.splice(0, list.length - MAX_EVENTS_PER_USER)

@@ -1,7 +1,8 @@
 import { createApp } from './app'
-import { MemoryRepository } from './repository'
+import { D1Repository } from './d1-repository'
 
-// Stage 5: in-memory storage (per Worker instance, lost on restart). Stage 6 swaps in MongoDB Atlas.
-const app = createApp({ repo: new MemoryRepository() })
+// Profiles and history live in Cloudflare D1 (binding `DB`, see wrangler.jsonc and migrations/).
+// A repository is cheap to build, so each request gets one bound to that request's env.
+const app = createApp({ repo: (env) => new D1Repository(env.DB) })
 
 export default app
