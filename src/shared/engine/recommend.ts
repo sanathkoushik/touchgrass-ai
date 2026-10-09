@@ -58,7 +58,7 @@ export function planSocialMode(activity: Activity, profile: UserProfile, ctx: Co
  * Builds the explanation from evidence we really have. Nothing here is guessed:
  * each sentence is only emitted when the data behind it exists.
  */
-export function explain(scored: ScoredActivity, ctx: Context): string {
+export function evidenceFacts(scored: ScoredActivity, ctx: Context): string[] {
   const { activity, components, evidence } = scored
   const parts: string[] = []
 
@@ -73,6 +73,13 @@ export function explain(scored: ScoredActivity, ctx: Context): string {
   }
   if (ctx.mood === 'low' && activity.intensity === 1) parts.push('It is gentle, which suits a low-energy moment.')
   if (components.time_fit >= 0.3) parts.push('Activities like this have worked for you around this time of day.')
+  return parts
+}
+
+/** The explanation shown with a deterministic recommendation: at most two of the true statements. */
+export function explain(scored: ScoredActivity, ctx: Context): string {
+  const { activity } = scored
+  const parts = evidenceFacts(scored, ctx)
 
   const planned = planDuration(activity, ctx)
   if (parts.length === 0) parts.push(`It fits the ${ctx.duration_limit} minutes you have.`)
@@ -105,18 +112,41 @@ export function planDeterministic(
   activities: Activity[] = ACTIVITIES,
 ): { recommendation: Recommendation; ranking: Ranking } {
   const ranking = rank(profile, ctx, history, activities)
-  const [primary, ...rest] = ranking.ranked
-  if (!primary) throw new Error('rank() returned no activities') // unreachable by construction
+  const recommendation = buildRecommendation(ranking, profile, ctx)
+  return { recommendation, ranking }
+}
 
-  const recommendation: Recommendation = {
+export interface RecommendationOverrides {
+  /** Choose this activity from the ranking instead of the top one. Must be present in `ranking.ranked`. */
+  activityId?: string
+  /** Replace the wording (used when an AI writes it). The activity facts (title, duration, mode) always stay ours. */
+  reason?: string
+  firstStep?: string
+  source?: Recommendation['source']
+  model?: string
+}
+
+/** Turns a ranking into the response shape. Title, duration and social mode always come from the catalog and engine. */
+export function buildRecommendation(
+  ranking: Ranking,
+  profile: UserProfile,
+  ctx: Context,
+  overrides: RecommendationOverrides = {},
+): Recommendation {
+  const primary =
+    (overrides.activityId ? ranking.ranked.find((s) => s.activity.id === overrides.activityId) : undefined) ?? ranking.ranked[0]
+  if (!primary) throw new Error('rank() returned no activities') // unreachable by construction
+  const rest = ranking.ranked.filter((s) => s !== primary)
+
+  return {
     activity_id: primary.activity.id,
     title: primary.activity.title,
     duration_min: planDuration(primary.activity, ctx),
-    reason: explain(primary, ctx),
-    first_step: primary.activity.firstStep,
+    reason: overrides.reason ?? explain(primary, ctx),
+    first_step: overrides.firstStep ?? primary.activity.firstStep,
     social_mode: planSocialMode(primary.activity, profile, ctx),
     fallback: pickFallback(primary, rest),
-    source: 'deterministic',
+    source: overrides.source ?? 'deterministic',
+    ...(overrides.model ? { model: overrides.model } : {}),
   }
-  return { recommendation, ranking }
 }

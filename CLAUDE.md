@@ -42,3 +42,11 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Every SQL statement uses `?` + `.bind()`; every query is scoped by `user_key`. Never build SQL from strings.
 - Any new `Repository` method must be added to `repository.contract.test.ts` and pass on both Memory and D1.
 - Free-tier budget: 100k rows written/day. Avoid per-request writes that are not needed.
+
+## AI (Stage 7, src/worker/ai)
+- The engine is the product; the AI only refines it. Every AI path must fall back to the deterministic recommendation and must never surface an AI error to the client.
+- Talk to models only through `AiProvider`. Never import Workers AI types into routes or the engine.
+- Model output is untrusted: it must pass `validateChoice` (offered activity only; no links, markdown, invented numbers or invented history; first step must match the activity). Do not loosen these checks to "get more AI answers".
+- The prompt carries only compact, anonymous facts from `evidenceFacts`. Never put session ids, user keys, or free text from the user into it. Never log prompts or replies.
+- The `AI` binding is opt-in via `TG_AI=1` (`npm run dev:ai`, `npm run deploy`). Do not add it to wrangler.jsonc: it would force a Cloudflare login for dev and tests. See docs/DECISIONS.md (002, 003).
+- Tests use scripted fake providers. Real-model checks are manual (`npm run dev:ai`) because they spend the free daily quota.

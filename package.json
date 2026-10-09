@@ -11,12 +11,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "cf-typegen": "wrangler types",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "node scripts/with-env.mjs TG_AI=1 -- npm run build && wrangler deploy",
     "typecheck": "tsc -b",
     "db:migrate:local": "node scripts/migrate-local.mjs",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "predev": "node scripts/migrate-local.mjs",
-    "db:reset:local": "wrangler d1 execute DB --local --command \"DELETE FROM events; DELETE FROM profiles;\""
+    "db:reset:local": "wrangler d1 execute DB --local --command \"DELETE FROM events; DELETE FROM profiles;\"",
+    "dev:ai": "node scripts/with-env.mjs TG_AI=1 -- vite",
+    "preview:ai": "node scripts/with-env.mjs TG_AI=1 -- npm run build && node scripts/with-env.mjs TG_AI=1 -- vite preview"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

@@ -209,5 +209,7 @@ export interface Recommendation {
   /** A second, safer option when there is one. */
   fallback: { activity_id: string; title: string; first_step: string } | null
   /** Where this came from, so the UI and logs can tell the difference. */
-  source: 'deterministic'
+  source: 'deterministic' | 'ai'
+  /** The model that wrote the wording, when source is 'ai'. */
+  model?: string
 }

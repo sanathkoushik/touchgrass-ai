@@ -22,6 +22,9 @@ import {
 } from '@/shared/api'
 import { getActivity, planDeterministic } from '@/shared/engine'
 import type { Context as EngineContext, HistoryEvent, UserProfile } from '@/shared/engine/types'
+import { AiGate } from './ai/gate'
+import type { AiProvider } from './ai/provider'
+import { refineWithAi } from './ai/refine'
 import type { Repository, StoredEvent } from './repository'
 import { localClock, offsetFromTimeZone } from './time'
 
@@ -30,6 +33,15 @@ export interface AppDeps {
   repo: Repository | ((env: Env) => Repository)
   /** Injectable clock so tests can control the time of day. */
   now?: () => Date
+  /**
+   * Optional AI. `provider` may return null when no AI is available (e.g. the binding is missing),
+   * in which case every request is answered by the deterministic engine.
+   */
+  ai?: {
+    provider: (env: Env) => AiProvider | null
+    gate?: AiGate
+    timeoutMs?: number
+  }
 }
 
 type AppEnv = {
@@ -122,8 +134,9 @@ function resolveOffsetMinutes(c: HonoContext<AppEnv>, clientOffset: number | und
 
 // ---------------------------------------------------------------------- app
 
-export function createApp({ repo: repoSource, now = () => new Date() }: AppDeps) {
+export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppDeps) {
   const app = new Hono<AppEnv>()
+  const aiGate = ai?.gate ?? new AiGate()
   const repoOf = (c: HonoContext<AppEnv>): Repository => (typeof repoSource === 'function' ? repoSource(c.env) : repoSource)
 
   app.use('*', secureHeaders())
@@ -223,7 +236,36 @@ export function createApp({ repo: repoSource, now = () => new Date() }: AppDeps)
     }
 
     const history = toHistory(await repo.listEvents(userKey, HISTORY_WINDOW))
-    const { recommendation } = planDeterministic(toEngineProfile(userKey, profile), ctx, history)
+    const engineProfile = toEngineProfile(userKey, profile)
+    const planned = planDeterministic(engineProfile, ctx, history)
+    let recommendation = planned.recommendation
+
+    // The AI may improve the choice and the wording, but the deterministic answer above is always the safety net.
+    const provider = input.use_ai ? (ai?.provider(c.env) ?? null) : null
+    if (provider && aiGate.canTry(at.getTime())) {
+      const refined = await refineWithAi({
+        provider,
+        profile: engineProfile,
+        ctx,
+        ranking: planned.ranking,
+        deterministic: planned.recommendation,
+        timeoutMs: ai?.timeoutMs,
+      })
+      aiGate.record(refined.outcome.status, now().getTime())
+      // Operational numbers only: never the prompt, the reply, or anything about the person.
+      console.log(
+        JSON.stringify({
+          t: 'ai',
+          status: refined.outcome.status,
+          attempts: refined.outcome.attempts,
+          ms: refined.outcome.ms,
+          in: refined.outcome.inputTokens,
+          out: refined.outcome.outputTokens,
+          neurons_est: refined.outcome.neuronsEstimate && Math.round(refined.outcome.neuronsEstimate * 10) / 10,
+        }),
+      )
+      recommendation = refined.recommendation
+    }
 
     const recommendationId = `r_${crypto.randomUUID()}`
     let persisted = true

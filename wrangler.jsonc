@@ -14,6 +14,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  // NOTE: the Workers AI binding (`AI`, Gemma 4) is deliberately NOT declared here.
+  // Workers AI has no local emulation: any config that declares it makes `npm run dev` and the tests demand a
+  // Cloudflare login and spend free quota. vite.config.ts adds the binding only when TG_AI=1
+  // (`npm run dev:ai` and `npm run deploy`). Without it, every recommendation comes from the engine alone.
   "assets": {
     // Unknown paths fall back to index.html so React Router handles them.
     "not_found_handling": "single-page-application",

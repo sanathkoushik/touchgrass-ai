@@ -32,3 +32,35 @@ not stored.
 **Trade-offs accepted:** D1 is Cloudflare-specific (moving off it later means writing another `Repository`), and the
 free daily write budget (100k rows) is a quota, not unlimited. Each recommendation costs ~2 writes, each feedback ~1.
 Events older than 180 days are pruned on write to keep storage bounded.
+
+## 002 — Gemma 4 on Workers AI, behind a swappable provider, with the engine as the guarantee (Stage 7, 2026-10-09)
+
+**Question raised:** is Gemma the best choice, and can the Claude Pro plan or another free model be used instead?
+
+**Findings (checked 2026-10-09):**
+
+- Claude Pro does **not** include API access ("The Pro plan does not include API usage through the Claude Console";
+  API usage is billed separately). A Claude API would be pay-as-you-go, not free, and not open-weight.
+- No provider offers unlimited free inference, and free tiers change: Google cut one Gemini free model from 250 to
+  20 requests/day (Dec 2025); OpenRouter's free models allow 50 requests/day (1,000 after a $10 top-up); Groq's free
+  allowance is per-model and small.
+- Gemma 4 26B A4B stays on Workers Free (Cloudflare changelog 2026-07-28). Free allowance: 10,000 Neurons/day, i.e.
+  roughly 650 compact recommendations/day (estimate: ~900 input + ~250 output tokens each; real usage is logged).
+- The task given to the model is small (choose among <= 3 pre-filtered candidates and word the result), so model
+  size matters far less than availability, privacy and the hackathon's open-weight requirement (report section 24).
+
+**Decision:** Gemma 4 26B A4B on Workers AI is the primary AI. It sits behind the `AiProvider` interface
+(`src/worker/ai/provider.ts`), so another provider (Groq, OpenRouter, local Ollama) is one new class. "Never run out"
+is guaranteed by the architecture, not by a provider: the deterministic engine produces a full answer every time, and
+the AI only ever improves it. User chose this option (over adding Groq or switching to Claude).
+
+## 003 — The Workers AI binding is opt-in (`TG_AI=1`) (Stage 7, 2026-10-09)
+
+Workers AI has no local emulation. Declaring the `ai` binding in `wrangler.jsonc` made `npm run dev` and every test
+run fail without a Cloudflare login (and would spend free quota on every dev session). So:
+
+- `wrangler.jsonc` declares only D1 and assets. `npm run dev` and `npm test` need no login and no network.
+- `vite.config.ts` adds `{ ai: { binding: "AI" } }` only when `TG_AI=1`. Use `npm run dev:ai` for live AI testing and
+  `npm run deploy` (which sets it) for production. Do not deploy with a plain `npm run build` + `wrangler deploy`,
+  or the production Worker will have no AI (it would still work, engine-only).
+- The Worker reads the binding defensively (`env.AI` may be absent) and falls back to the engine.

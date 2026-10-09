@@ -34,10 +34,19 @@ Hono on a Cloudflare Worker. Source: `src/worker/`. Contract (validation + types
 `duration_limit` (5-480) is required. `mood` defaults to `ok`, `social_available` to `false`. `utc_offset_minutes`
 (browser: `-new Date().getTimezoneOffset()`) tells the server the user's local time of day; without it the edge
 time zone is used, then UTC. Weather is not accepted from clients: the server will fetch it itself (Phase 9).
+`use_ai` (default `true`) lets a client skip the AI and get the instant deterministic pick, which also saves the
+free daily AI quota.
 
 Response: `recommendation_id`, `activity_id`, `title`, `duration_min`, `reason`, `first_step`, `social_mode`,
-`fallback` (a gentler second option, or null), `source` (`deterministic` for now) and `persisted`
-(false if saving failed; the recommendation is still valid).
+`fallback` (a gentler second option, or null), `source` (`ai` or `deterministic`), `model` (only when `source` is
+`ai`) and `persisted` (false if saving failed; the recommendation is still valid).
+
+**How the AI fits in.** The engine always runs first and produces a complete answer. If an AI is available (and
+`use_ai` is not false), Gemma 4 may choose among the top 3 candidates and word the `reason` and `first_step`. Title,
+duration and social mode always come from the catalog. The reply is validated (must pick an offered activity; no
+links, markdown, invented numbers or invented history; first step must match the activity), retried once, and on any
+failure, timeout, busy signal or exhausted quota the deterministic answer is returned unchanged. Clients never see
+an AI error. After a failure the Worker skips the AI for a while (30 s busy, 10 s error, until 00:00 UTC for quota).
 
 ### POST /api/feedback
 
@@ -55,7 +64,11 @@ npm run dev -- --port 5188      # applies local DB migrations, then runs Vite + 
 curl http://localhost:5188/health
 npm test                        # engine, repository-contract and API tests (API + contract run on memory AND real local D1)
 npm run db:reset:local          # wipe the local dev database
+npm run dev:ai -- --port 5188   # same, but with the REAL Gemma 4 (needs `npx wrangler login`; spends free daily quota)
 ```
+
+Plain `npm run dev` never needs a Cloudflare login and never spends AI quota: recommendations come from the engine
+alone (`source: "deterministic"`).
 
 ## Decisions worth remembering
 

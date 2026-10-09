@@ -86,6 +86,8 @@ export const recommendInputSchema = z.strictObject({
   social_available: z.boolean().default(false),
   /** Minutes east of UTC for the user's clock (browser: -new Date().getTimezoneOffset()). */
   utc_offset_minutes: z.int().min(-840).max(840).optional(),
+  /** Set false to skip the AI and get the instant deterministic pick (also saves the free daily AI quota). */
+  use_ai: z.boolean().default(true),
 })
 export type RecommendInput = z.input<typeof recommendInputSchema>
 
