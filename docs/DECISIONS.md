@@ -102,3 +102,10 @@ run fail without a Cloudflare login (and would spend free quota on every dev ses
   `npm run deploy` (which sets it) for production. Do not deploy with a plain `npm run build` + `wrangler deploy`,
   or the production Worker will have no AI (it would still work, engine-only).
 - The Worker reads the binding defensively (`env.AI` may be absent) and falls back to the engine.
+
+## 005 - Live context from Open-Meteo, location never stored (Stage 9)
+- Weather, daylight (is_day, sunrise/sunset) and city search come from Open-Meteo: free, no key, real-time. Terms checked 2026-10-09: non-commercial use only, under 10,000 calls/day, attribution required (shown in the Plan screen). If the app is ever monetised, switch to their paid plan or another source.
+- Privacy: location is opt-in (tap), rounded to ~1 km in the browser and again on the server, sent only to Open-Meteo, kept in this browser's localStorage only, never in D1 or logs. Cleared by "Delete my data".
+- Resilience: 2 s timeout, 10-minute cache per ~1 km cell, 30 s cool-down after an outage; any failure means "plan without weather", never an error. Unknown WMO codes are not guessed.
+- The place's own UTC offset drives "local hour", so daylight and late-night rules are right for the place chosen.
+- Venue/map search (real nearby places) is NOT part of this stage; planned later as an optional improvement (OpenStreetMap).

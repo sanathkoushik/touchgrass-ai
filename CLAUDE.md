@@ -61,3 +61,8 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Wording stays guilt-free: no streaks, no red failure marks, "Did not go" not "Failed".
 - `PrimaryAction` sets one explicit accessible name (the Halo button splits its label into per-letter spans).
 - Browser-test with plain `npm run dev`; use `npm run dev:ai` only to see the real AI upgrade (it spends free quota). Delete test data afterwards (`npm run db:reset:local` or DELETE /api/profile).
+
+## Live context (Stage 9, src/worker/context, src/lib/location.ts)
+- Weather comes only through `ContextProvider` (Open-Meteo). Any failure means "no weather", never an error to the client.
+- Coordinates are rounded (`roundCoord`) and are NEVER stored, logged, or put in the AI prompt. Store only weather category/temp and daylight.
+- Location is requested only from a user tap. The app must stay non-commercial while on the free Open-Meteo plan, and keep the attribution visible.

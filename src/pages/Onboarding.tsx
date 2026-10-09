@@ -9,6 +9,7 @@ import { PrimaryAction } from '@/components/tg/PrimaryAction'
 import { Button } from '@/components/ui/button'
 import { useProfile } from '@/hooks/useProfile'
 import { ApiError, deleteProfile, saveProfile } from '@/lib/api'
+import { clearPlace } from '@/lib/location'
 import { clearMission, setProfileHint } from '@/lib/mission-store'
 import {
   AVOIDANCE_LABELS,
@@ -103,6 +104,7 @@ export default function Onboarding() {
     try {
       await deleteProfile()
       clearMission()
+      clearPlace()
       setProfileHint(false)
       navigate('/')
     } catch (err) {

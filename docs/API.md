@@ -96,3 +96,11 @@ alone (`source: "deterministic"`).
 - If saving an event fails, `/api/recommend` still answers (`persisted: false`), per the failure-handling table in the report.
 - `assets.run_worker_first` is set for `/api/*` and `/health` so a browser "navigation" to an API path can never be
   answered with `index.html`.
+
+## Live context (Stage 9)
+
+All optional. A location is only ever sent with the person's consent, is rounded to 2 decimals (~1 km) and is never stored.
+
+- `POST /api/context` body `{ location: {lat, lon} }` -> `{ available, conditions?: { weather: {category, temp_c}, daylight: 'day'|'night', sunrise?, sunset? } }`. `available:false` when the weather service cannot be reached (still HTTP 200).
+- `POST /api/places` body `{ q }` (2-60 chars) -> `{ available, places: [{name, region?, country?, lat, lon}] }` (city search, Open-Meteo geocoding).
+- `POST /api/recommend` accepts `location`; the response gains `context` (the conditions it was made with). Only category and temperature are stored with the event.

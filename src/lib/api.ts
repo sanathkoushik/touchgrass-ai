@@ -1,3 +1,4 @@
+import type { ContextResponse, Location, PlacesResponse } from '@/shared/context'
 import type {
   ApiErrorBody,
   FeedbackInput,
@@ -95,6 +96,14 @@ export const recommend = (input: RecommendInput, signal?: AbortSignal) =>
  */
 export const upgradeRecommendation = (id: string, signal?: AbortSignal) =>
   request<UpgradeResponse>('POST', `/api/recommend/${encodeURIComponent(id)}/upgrade`, { signal, timeoutMs: 12_000 })
+
+/** What it is like outside at a place the person chose to share (rounded, never stored by us). */
+export const getConditions = (location: Location, signal?: AbortSignal) =>
+  request<ContextResponse>('POST', '/api/context', { body: { location }, signal, timeoutMs: 8_000 })
+
+/** City search, the alternative to sharing the device location. */
+export const searchPlaces = (q: string, signal?: AbortSignal) =>
+  request<PlacesResponse>('POST', '/api/places', { body: { q }, signal, timeoutMs: 8_000 })
 
 export const sendFeedback = (input: FeedbackInput) => request<FeedbackResponse>('POST', '/api/feedback', { body: input })
 export const getHistory = (limit = 30, signal?: AbortSignal) => request<HistoryResponse>('GET', `/api/history?limit=${limit}`, { signal })

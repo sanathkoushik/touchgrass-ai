@@ -53,6 +53,9 @@ export function buildPrompt(
       energy: ctx.mood,
       friend_free: ctx.social_available,
       local_hour: ctx.hour,
+      // Real conditions, only when we have them. The model may mention these but must not invent any others.
+      ...(ctx.weather ? { weather: { sky: ctx.weather.category, temp_c: Math.round(ctx.weather.temp_c) } } : {}),
+      ...(typeof ctx.is_daylight === 'boolean' ? { daylight: ctx.is_daylight ? 'day' : 'night' } : {}),
     },
     candidates: withFacts.map(({ scored, facts }) => ({
       id: scored.activity.id,
@@ -159,6 +162,8 @@ export function validateChoice(raw: unknown, pc: PromptContext): Validation {
     ...numbersIn(knownText),
     ...pc.candidates.map((c) => planDuration(c.scored.activity, pc.ctx)),
     pc.ctx.duration_limit,
+    // The real temperature was given to the model, so quoting it is not an invention.
+    ...(pc.ctx.weather ? [Math.round(pc.ctx.weather.temp_c)] : []),
   ])
 
   for (const n of numbersIn(reason)) {

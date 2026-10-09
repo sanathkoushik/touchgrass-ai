@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { locationSchema, type ConditionsSummary } from './context'
 import {
   AVOIDANCES,
   EQUIPMENT,
@@ -88,6 +89,11 @@ export const recommendInputSchema = z.strictObject({
   utc_offset_minutes: z.int().min(-840).max(840).optional(),
   /** Set false to skip the AI and get the instant deterministic pick (also saves the free daily AI quota). */
   use_ai: z.boolean().default(true),
+  /**
+   * Optional, and only ever sent with the person's consent. Used to look up live weather and daylight, rounded to
+   * ~1 km, and NEVER stored. Without it the recommendation is made without weather.
+   */
+  location: locationSchema.optional(),
 })
 export type RecommendInput = z.input<typeof recommendInputSchema>
 
@@ -95,6 +101,8 @@ export interface RecommendResponse extends Recommendation {
   recommendation_id: string
   /** False if saving the event failed; the recommendation is still valid, feedback may not be recordable. */
   persisted: boolean
+  /** The live conditions this recommendation was made with. Absent when no location was given or weather was unavailable. */
+  context?: ConditionsSummary
 }
 
 // ----------------------------------------------------------------- upgrade

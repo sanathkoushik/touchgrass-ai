@@ -6,13 +6,15 @@ import type { RecommendResponse } from '@/shared/api'
 import type { Mood, SkipReason, SocialMode } from '@/shared/engine/types'
 import { ChoiceGroup } from '@/components/tg/ChoiceGroup'
 import { ContextPill } from '@/components/tg/ContextPill'
+import { LocationPicker } from '@/components/tg/LocationPicker'
 import { MissionCard } from '@/components/tg/MissionCard'
 import { PreferenceChip } from '@/components/tg/PreferenceChip'
 import { PrimaryAction } from '@/components/tg/PrimaryAction'
 import { Button } from '@/components/ui/button'
 import { useMission, type PlanContext } from '@/hooks/useMission'
 import { useProfile } from '@/hooks/useProfile'
-import { DURATION_OPTIONS_FOR_PLAN, MOOD_LABELS, SKIP_REASON_LABELS } from '@/lib/vocab'
+import { loadPlace, type SavedPlace } from '@/lib/location'
+import { DURATION_OPTIONS_FOR_PLAN, MOOD_LABELS, SKIP_REASON_LABELS, WEATHER_LABELS } from '@/lib/vocab'
 
 const MODE_LABEL: Record<SocialMode, string> = { solo: 'On your own', with_friend: 'With a friend', small_group: 'Small group' }
 const MOOD_OPTIONS = (Object.keys(MOOD_LABELS) as Mood[]).map((m) => ({ value: m, label: MOOD_LABELS[m].label, hint: MOOD_LABELS[m].hint }))
@@ -40,6 +42,11 @@ function Meta({ rec, upgrading }: { rec: RecommendResponse; upgrading: boolean }
     <>
       <ContextPill icon={Clock}>{rec.duration_min} min</ContextPill>
       <ContextPill icon={rec.social_mode === 'solo' ? User : Users}>{MODE_LABEL[rec.social_mode]}</ContextPill>
+      {rec.context && (
+        <ContextPill>
+          {WEATHER_LABELS[rec.context.weather.category]}, {rec.context.weather.temp_c}°C · {rec.context.daylight === 'day' ? 'daylight' : 'after dark'}
+        </ContextPill>
+      )}
       {upgrading ? (
         <ContextPill icon={Sparkles} className="animate-pulse">
           Personalizing…
@@ -60,6 +67,7 @@ export default function Plan() {
   const [mood, setMood] = useState<Mood>('ok')
   const [friend, setFriend] = useState(false)
   const [swapOpen, setSwapOpen] = useState(false)
+  const [place, setPlace] = useState<SavedPlace | null>(() => loadPlace())
   const touchedMinutes = useRef(false)
   const missionArea = useRef<HTMLDivElement>(null)
   const reduceMotion = useReducedMotion()
@@ -79,7 +87,12 @@ export default function Plan() {
     }
   }, [kind, reduceMotion])
 
-  const ctx: PlanContext = { duration_limit: minutes, mood, social_available: friend }
+  const ctx: PlanContext = {
+    duration_limit: minutes,
+    mood,
+    social_available: friend,
+    ...(place ? { location: { lat: place.lat, lon: place.lon } } : {}),
+  }
   const busy = phase.kind === 'loading'
 
   const status =
@@ -119,6 +132,7 @@ export default function Plan() {
             <p className="mb-2 text-sm font-medium">How is your energy?</p>
             <ChoiceGroup label="Energy" options={MOOD_OPTIONS} value={mood} onChange={setMood} disabled={busy} />
           </div>
+          <LocationPicker place={place} onChange={setPlace} disabled={busy} />
           <PreferenceChip selected={friend} onToggle={() => setFriend((f) => !f)} disabled={busy}>
             Someone is free to join me
           </PreferenceChip>

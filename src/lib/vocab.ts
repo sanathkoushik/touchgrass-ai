@@ -1,4 +1,4 @@
-import type { Avoidance, Equipment, Mood, Motivator, SkipReason, SocialPreference } from '@/shared/engine/types'
+import type { Avoidance, Equipment, Mood, Motivator, SkipReason, SocialPreference, WeatherCategory } from '@/shared/engine/types'
 
 /**
  * Human wording for every choice the person can make. These are `Record<Union, ...>` on purpose:
@@ -96,3 +96,13 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
 }
 
 export const DURATION_OPTIONS_FOR_PLAN = [15, 30, 45, 60, 90, 120] as const
+
+/** Plain words for the live sky, as shown in the app (from Open-Meteo's weather code). */
+export const WEATHER_LABELS: Record<WeatherCategory, string> = {
+  clear: 'Clear',
+  cloudy: 'Cloudy',
+  fog: 'Foggy',
+  rain: 'Rainy',
+  storm: 'Stormy',
+  snow: 'Snowy',
+}

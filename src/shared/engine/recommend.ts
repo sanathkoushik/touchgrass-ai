@@ -2,6 +2,7 @@ import { ACTIVITIES, GUARANTEED_FALLBACK_ID, getActivity } from './activities'
 import { filterActivities } from './filter'
 import { scoreActivities } from './score'
 import type {
+  WeatherCategory,
   Activity,
   Context,
   HistoryEvent,
@@ -73,7 +74,23 @@ export function evidenceFacts(scored: ScoredActivity, ctx: Context): string[] {
   }
   if (ctx.mood === 'low' && activity.intensity === 1) parts.push('It is gentle, which suits a low-energy moment.')
   if (components.time_fit >= 0.3) parts.push('Activities like this have worked for you around this time of day.')
+  // Live conditions are only mentioned when we really have them AND they matter for this activity (it is outdoors).
+  // The filter has already confirmed the conditions suit it, so the statement is both true and relevant.
+  if (ctx.weather && activity.weather === 'clear_sky') {
+    parts.push('The sky is clear right now.')
+  } else if (ctx.weather && activity.weather !== 'any') {
+    parts.push(`It is ${SKY_WORD[ctx.weather.category]} and ${Math.round(ctx.weather.temp_c)} degrees outside.`)
+  }
   return parts
+}
+
+const SKY_WORD: Record<WeatherCategory, string> = {
+  clear: 'clear',
+  cloudy: 'cloudy',
+  fog: 'foggy',
+  rain: 'rainy',
+  storm: 'stormy',
+  snow: 'snowy',
 }
 
 /** The explanation shown with a deterministic recommendation: at most two of the true statements. */

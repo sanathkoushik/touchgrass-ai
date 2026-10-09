@@ -29,3 +29,6 @@ Photos in `public/photos/field-01..10.webp` are from Unsplash, used under the [U
 1506905925346-21bda4d32df4, 1469474968028-56623f02e42e, 1433086966358-54859d0ed716, 1501854140801-50d01698950b, 1464822759023-fed622ff2c3b, 1500534314209-a25ddb2bd429, 1440342359743-84fcb8c21f21, 1511884642898-4c92249e20b6, 1448375240586-882707db888b, 1542273917363-3b1817f69a2d.
 Unsplash+ (premium) images are NOT used. A pink/purple galaxy image from the component's defaults was dropped for palette reasons.
 
+
+## Open-Meteo
+Weather and geocoding data by Open-Meteo.com (https://open-meteo.com), licensed CC BY 4.0, free for non-commercial use.

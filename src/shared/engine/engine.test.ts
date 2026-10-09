@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  evidenceFacts,
   ACTIVITIES,
   GUARANTEED_FALLBACK_ID,
   filterActivities,
@@ -409,6 +410,33 @@ describe('explanations only state facts we have', () => {
       const fb = getActivity(recommendation.fallback.activity_id)!
       expect(fb.intensity).toBeLessThanOrEqual(main.intensity)
       expect(fb.id).not.toBe(main.id)
+    }
+  })
+})
+
+describe('live conditions as true statements', () => {
+  const factsFor = (id: string, ctx: Context) => {
+    const profile = baseProfile({ equipment: ['bicycle', 'racket', 'ball', 'swimwear', 'yoga_mat', 'sketchbook', 'cards', 'trash_bag'] })
+    const scored = rank(profile, ctx, []).ranked.find((s) => s.activity.id === id)
+    expect(scored, `${id} should be a candidate`).toBeTruthy()
+    return evidenceFacts(scored!, ctx)
+  }
+
+  it('states the real weather for an outdoor activity', () => {
+    const facts = factsFor('brisk_walk_loop', baseCtx({ weather: { category: 'cloudy', temp_c: 23.6 } }))
+    expect(facts).toContain('It is cloudy and 24 degrees outside.')
+  })
+
+  it('says the sky is clear for stargazing, and mentions nothing for sheltered activities', () => {
+    const night = baseCtx({ hour: 21, is_daylight: false, weather: { category: 'clear', temp_c: 20 } })
+    expect(factsFor('rooftop_stargazing', night)).toContain('The sky is clear right now.')
+    expect(factsFor('stretch_flow', baseCtx({ weather: { category: 'clear', temp_c: 24 } })).join(' ')).not.toMatch(/outside|sky|degrees/i)
+  })
+
+  it('never mentions weather when it is unknown', () => {
+    for (const a of ACTIVITIES) {
+      const scored = rank(baseProfile({ equipment: ['bicycle', 'racket', 'ball', 'swimwear', 'yoga_mat', 'sketchbook', 'cards', 'trash_bag'] }), baseCtx({ weather: undefined, social_available: true, duration_limit: 300 }), []).ranked.find((s) => s.activity.id === a.id)
+      if (scored) expect(evidenceFacts(scored, baseCtx({ weather: undefined })).join(' '), a.id).not.toMatch(/degrees|sky|outside/i)
     }
   })
 })

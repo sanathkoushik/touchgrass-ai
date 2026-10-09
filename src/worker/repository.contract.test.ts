@@ -78,7 +78,7 @@ describe.each(STORAGE_KINDS)('Repository contract: %s', (kind) => {
 
   describe('events', () => {
     it('adds and reads an event back unchanged', async () => {
-      const e = event('1', { context: { duration_limit: 45, mood: 'low', social_available: true, hour: 8, weather: 'clear' } })
+      const e = event('1', { context: { duration_limit: 45, mood: 'low', social_available: true, hour: 8, weather: { category: 'clear', temp_c: 24 }, is_daylight: true } })
       await repo.addEvent(U1, e)
       expect(await repo.getEvent(U1, 'r_1')).toStrictEqual(e)
     })

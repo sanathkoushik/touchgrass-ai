@@ -24,9 +24,11 @@ import {
 } from '@/shared/api'
 import { getActivity, planDeterministic } from '@/shared/engine'
 import type { Context as EngineContext, HistoryEvent, UserProfile } from '@/shared/engine/types'
+import { contextInputSchema, placesInputSchema, roundLocation, type ConditionsSummary, type ContextResponse, type Location, type PlacesResponse } from '@/shared/context'
 import { AiGate } from './ai/gate'
 import type { AiProvider } from './ai/provider'
 import { refineWithAi } from './ai/refine'
+import type { Conditions, ContextProvider } from './context/provider'
 import type { Repository, StoredEvent } from './repository'
 import { localClock, offsetFromTimeZone } from './time'
 
@@ -44,6 +46,8 @@ export interface AppDeps {
     gate?: AiGate
     timeoutMs?: number
   }
+  /** Live weather and place search. Without it the app plans without weather. */
+  context?: ContextProvider
 }
 
 type AppEnv = {
@@ -127,6 +131,21 @@ function statsOf(events: StoredEvent[]): ProfileStats {
   }
 }
 
+/** Asks the weather service, treating ANY problem as "no weather": it must never break a recommendation. */
+async function safeConditions(provider: ContextProvider, loc: Location): Promise<Conditions | null> {
+  try {
+    return await provider.conditions(loc.lat, loc.lon)
+  } catch {
+    return null
+  }
+}
+
+/** The conditions shown to the person, from what the recommendation was actually made with. */
+function summaryOf(ctx: EngineContext): ConditionsSummary | undefined {
+  if (!ctx.weather || typeof ctx.is_daylight !== 'boolean') return undefined
+  return { weather: ctx.weather, daylight: ctx.is_daylight ? 'day' : 'night' }
+}
+
 /** The user's offset: what the browser told us, else the edge's time zone for this request, else UTC. */
 function resolveOffsetMinutes(c: HonoContext<AppEnv>, clientOffset: number | undefined, at: Date): number {
   if (clientOffset !== undefined) return clientOffset
@@ -136,7 +155,7 @@ function resolveOffsetMinutes(c: HonoContext<AppEnv>, clientOffset: number | und
 
 // ---------------------------------------------------------------------- app
 
-export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppDeps) {
+export function createApp({ repo: repoSource, now = () => new Date(), ai, context }: AppDeps) {
   const app = new Hono<AppEnv>()
   const aiGate = ai?.gate ?? new AiGate()
   const repoOf = (c: HonoContext<AppEnv>): Repository => (typeof repoSource === 'function' ? repoSource(c.env) : repoSource)
@@ -229,12 +248,20 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppD
     if (!profile) return c.json(errorBody('profile_not_found', 'No profile yet. Complete onboarding first.'), 404)
 
     const at = now()
-    const clock = localClock(at, resolveOffsetMinutes(c, input.utc_offset_minutes, at))
+
+    // Live conditions, only if the person shared a location. Rounded to ~1 km, used for this one lookup, never stored.
+    // If the weather service is slow or down we simply plan without weather.
+    const conditions = input.location && context ? await safeConditions(context, roundLocation(input.location)) : null
+
+    // The place's own clock when we know it (so "daylight" and "late at night" are right THERE), else the browser's.
+    const offsetMinutes = conditions ? Math.round(conditions.utc_offset_seconds / 60) : resolveOffsetMinutes(c, input.utc_offset_minutes, at)
+    const clock = localClock(at, offsetMinutes)
     const ctx: EngineContext = {
       duration_limit: input.duration_limit,
       social_available: input.social_available,
       mood: input.mood,
       hour: clock.hour,
+      ...(conditions ? { weather: { category: conditions.category, temp_c: conditions.temp_c }, is_daylight: conditions.is_day } : {}),
     }
 
     const history = toHistory(await repo.listEvents(userKey, HISTORY_WINDOW))
@@ -277,7 +304,16 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppD
         activity_id: recommendation.activity_id,
         timestamp: clock.iso,
         outcome: 'pending',
-        context: { duration_limit: ctx.duration_limit, mood: ctx.mood, social_available: ctx.social_available, hour: ctx.hour },
+        // Stored with the recommendation: the conditions it was made under (never the location itself), so the
+        // upgrade step rebuilds exactly the same situation.
+        context: {
+          duration_limit: ctx.duration_limit,
+          mood: ctx.mood,
+          social_available: ctx.social_available,
+          hour: ctx.hour,
+          ...(ctx.weather ? { weather: ctx.weather } : {}),
+          ...(typeof ctx.is_daylight === 'boolean' ? { is_daylight: ctx.is_daylight } : {}),
+        },
       })
     } catch (err) {
       // Storage trouble must never block the answer: the user still gets their mission.
@@ -285,7 +321,8 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppD
       console.error(JSON.stringify({ t: 'persist_failed', where: 'recommend', message: String((err as Error)?.message ?? err) }))
     }
 
-    const body: RecommendResponse = { recommendation_id: recommendationId, ...recommendation, persisted }
+    const summary = summaryOf(ctx)
+    const body: RecommendResponse = { recommendation_id: recommendationId, ...recommendation, persisted, ...(summary ? { context: summary } : {}) }
     return c.json(body)
   })
 
@@ -319,6 +356,8 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppD
       social_available: event.context.social_available,
       mood: event.context.mood,
       hour: event.context.hour,
+      ...(event.context.weather ? { weather: event.context.weather } : {}),
+      ...(typeof event.context.is_daylight === 'boolean' ? { is_daylight: event.context.is_daylight } : {}),
     }
     const engineProfile = toEngineProfile(userKey, profile)
     const history = toHistory(await repo.listEvents(userKey, HISTORY_WINDOW))
@@ -358,9 +397,10 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppD
       return notUpgraded('ai_failed')
     }
     if (!ok) return notUpgraded('ai_failed')
+    const upgradedSummary = summaryOf(ctx)
     const body: UpgradeResponse = {
       upgraded: true,
-      recommendation: { recommendation_id: id.data, ...refined.recommendation, persisted: true },
+      recommendation: { recommendation_id: id.data, ...refined.recommendation, persisted: true, ...(upgradedSummary ? { context: upgradedSummary } : {}) },
     }
     return c.json(body)
   })
@@ -407,6 +447,36 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppD
         skip_reason: e.skip_reason ?? null,
       })),
     }
+    return c.json(body)
+  })
+
+  // ---- context: what it is like outside right now, for a location the person chose to share
+  app.post('/api/context', validate('json', contextInputSchema), async (c) => {
+    const loc = roundLocation(c.req.valid('json').location)
+    const found = context ? await safeConditions(context, loc) : null
+    const body: ContextResponse = found
+      ? {
+          available: true,
+          conditions: {
+            weather: { category: found.category, temp_c: found.temp_c },
+            daylight: found.is_day ? 'day' : 'night',
+            ...(found.sunrise ? { sunrise: found.sunrise } : {}),
+            ...(found.sunset ? { sunset: found.sunset } : {}),
+          },
+        }
+      : { available: false }
+    return c.json(body)
+  })
+
+  // ---- places: look a city up by name (the alternative to sharing the device location)
+  app.post('/api/places', validate('json', placesInputSchema), async (c) => {
+    let places = null
+    try {
+      places = context ? await context.places(c.req.valid('json').q) : null
+    } catch {
+      places = null
+    }
+    const body: PlacesResponse = { available: places !== null, places: places ?? [] }
     return c.json(body)
   })
 

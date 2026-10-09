@@ -72,6 +72,23 @@ describe('prompt', () => {
     }
   })
 
+  it('includes real conditions only when they are known', () => {
+    const none = buildPrompt(profile, { ...ctx, weather: undefined }, top3).request.user
+    expect(none).not.toContain('"weather"')
+    expect(none).not.toContain('"daylight"')
+    const rainy = buildPrompt(profile, { ...ctx, weather: { category: 'cloudy', temp_c: 23.6 }, is_daylight: false }, top3).request.user
+    expect(rainy).toContain('"weather":{"sky":"cloudy","temp_c":24}')
+    expect(rainy).toContain('"daylight":"night"')
+  })
+
+  it('lets the model quote the real temperature, but still not an invented one', () => {
+    const wctx: Context = { ...ctx, weather: { category: 'clear', temp_c: 27.2 }, is_daylight: true }
+    const { context } = buildPrompt(profile, wctx, top3)
+    const reply = (reason: string) => validateChoice({ activity_id: A.id, reason, first_step: `${A.firstStep} Notice one thing.` }, context)
+    expect(reply('It is 27 degrees and you like walking, so this fits your 60 minutes.').ok).toBe(true)
+    expect(reply('It is 35 degrees and you like walking, so this fits your 60 minutes.').ok).toBe(false)
+  })
+
   it('adds a retry hint only when asked, and the hint never contains model text', () => {
     expect(buildPrompt(profile, ctx, top3).request.user).not.toContain('rejected')
     expect(buildPrompt(profile, ctx, top3, 'activity_id is not one of the candidate ids').request.user).toContain('rejected')
