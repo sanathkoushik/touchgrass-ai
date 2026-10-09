@@ -49,4 +49,6 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Model output is untrusted: it must pass `validateChoice` (offered activity only; no links, markdown, invented numbers or invented history; first step must match the activity). Do not loosen these checks to "get more AI answers".
 - The prompt carries only compact, anonymous facts from `evidenceFacts`. Never put session ids, user keys, or free text from the user into it. Never log prompts or replies.
 - The `AI` binding is opt-in via `TG_AI=1` (`npm run dev:ai`, `npm run deploy`). Do not add it to wrangler.jsonc: it would force a Cloudflare login for dev and tests. See docs/DECISIONS.md (002, 003).
-- Tests use scripted fake providers. Real-model checks are manual (`npm run dev:ai`) because they spend the free daily quota.
+- Tests use scripted fake providers. Real-model checks are manual because they spend the free daily quota: `npm run test:live` (20 scenarios, ~120 neurons; `TG_LIVE_N`, `TG_LIVE_ONLY`, `TG_LIVE_REPEAT` narrow it) and `node live/probe.mjs` (prints one raw reply). Re-run `test:live` after ANY change to the prompt, the validator or the model.
+- Gemma 4 must be called with `chat_template_kwargs: { enable_thinking: false }`; with thinking on it returns an empty answer and wastes ~7x the neurons. Do not remove it.
+- The whole AI step has a 6 s budget (`refineWithAi` default). Use the exact `usage.neurons` the API reports for budgeting.

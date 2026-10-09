@@ -141,6 +141,30 @@ describe('validateChoice: nothing unsafe or invented reaches the user', () => {
     }
   })
 
+  it('allows "never" when it describes the activity itself, but not when it would describe the person', () => {
+    const cafe = ranking.ranked.find((s) => s.activity.id === 'new_cafe_walk')!
+    const walk = ranking.ranked.find((s) => s.activity.id === 'brisk_walk_loop')!
+    const { context: both } = buildPrompt(profile, ctx, [cafe, walk])
+    const reply = (activity: Activity) => ({
+      activity_id: activity.id,
+      reason: 'You might enjoy exploring a place you have never been before, and it fits the 60 minutes you have.',
+      first_step: activity.firstStep,
+    })
+    // The café walk's own instruction says "a place you have never been": describing it that way is honest.
+    expect(validateChoice(reply(cafe.activity), both).ok).toBe(true)
+    // Nothing in the brisk walk's text says "never", so here it would be an invented claim.
+    expect(validateChoice(reply(walk.activity), both).ok).toBe(false)
+  })
+
+  it('rejects overstated feelings and invented possessions, in either field', () => {
+    for (const bad of ['You love walking and photography, so this fits your hour.', 'Your passion for walking makes this a natural choice today.']) {
+      expect(check({ reason: bad }).ok, bad).toBe(false)
+    }
+    expect(check({ first_step: `${A.firstStep} Bring your favorite water bottle.` }).ok).toBe(false)
+    // "like" and "enjoy" are fine, and a first step may say "never" (e.g. "a place you have never been").
+    expect(check({ reason: 'You enjoy walking and photography, so this fits the 60 minutes you have.' }).ok).toBe(true)
+  })
+
   it('rejects a first step that has nothing to do with the chosen activity', () => {
     expect(check({ first_step: 'Order a pizza and watch a film tonight, then relax.' })).toMatchObject({ ok: false })
   })
@@ -159,7 +183,7 @@ describe('refineWithAi', () => {
     expect(recommendation.title).toBe(A.title)
     expect(recommendation.reason).toContain('You said you like walking')
     expect(recommendation.duration_min).toBeLessThanOrEqual(ctx.duration_limit)
-    expect(outcome.neuronsEstimate).toBeGreaterThan(0)
+    expect(outcome.neurons).toBeGreaterThan(0)
   })
 
   it('lets the AI pick the second candidate, and the response is rebuilt around it', async () => {
@@ -285,6 +309,8 @@ describe('WorkersAiProvider', () => {
     expect(b.calls[0]![2]).toEqual({ rejectIfBusy: true })
     expect((b.calls[0]![1] as { messages: unknown[] }).messages).toHaveLength(2)
     expect(out).toEqual({ text: '{"x":1}', model: GEMMA_MODEL, usage: { inputTokens: 10, outputTokens: 5 } })
+    // Thinking must be off, or Gemma 4 burns its whole budget reasoning and returns nothing.
+    expect((b.calls[0]![1] as { chat_template_kwargs: unknown }).chat_template_kwargs).toEqual({ enable_thinking: false })
   })
 
   it('reads every response shape Workers AI uses', () => {

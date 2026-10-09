@@ -18,7 +18,8 @@
     "predev": "node scripts/migrate-local.mjs",
     "db:reset:local": "wrangler d1 execute DB --local --command \"DELETE FROM events; DELETE FROM profiles;\"",
     "dev:ai": "node scripts/with-env.mjs TG_AI=1 -- vite",
-    "preview:ai": "node scripts/with-env.mjs TG_AI=1 -- npm run build && node scripts/with-env.mjs TG_AI=1 -- vite preview"
+    "preview:ai": "node scripts/with-env.mjs TG_AI=1 -- npm run build && node scripts/with-env.mjs TG_AI=1 -- vite preview",
+    "test:live": "vitest run --config vitest.live.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

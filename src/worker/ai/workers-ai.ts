@@ -27,9 +27,13 @@ export function extractText(out: unknown): string | null {
 }
 
 function extractUsage(out: unknown): AiCompletion['usage'] {
-  const u = (out as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } } | null)?.usage
+  const u = (out as { usage?: { prompt_tokens?: unknown; completion_tokens?: unknown; neurons?: unknown } } | null)?.usage
   if (typeof u?.prompt_tokens === 'number' && typeof u?.completion_tokens === 'number') {
-    return { inputTokens: u.prompt_tokens, outputTokens: u.completion_tokens }
+    return {
+      inputTokens: u.prompt_tokens,
+      outputTokens: u.completion_tokens,
+      ...(typeof u.neurons === 'number' ? { neurons: u.neurons } : {}),
+    }
   }
   return undefined
 }
@@ -91,6 +95,9 @@ export class WorkersAiProvider implements AiProvider {
             max_completion_tokens: request.maxTokens,
             temperature: request.temperature,
             response_format: { type: 'json_object' },
+            // Gemma 4 is a reasoning model. Left on, it spends the whole token budget "thinking" and returns no answer
+            // (measured: 400 tokens / 11.6 neurons / empty reply vs 38 tokens / 1.7 neurons / valid reply with it off).
+            chat_template_kwargs: { enable_thinking: false },
           },
           // Never wait in Cloudflare's capacity queue: if it is busy, fail fast and use the deterministic answer.
           { rejectIfBusy: true },
@@ -98,7 +105,10 @@ export class WorkersAiProvider implements AiProvider {
         signal,
       )
       const text = extractText(out)
-      if (!text) throw new AiUnavailableError('error', 'AI returned no text')
+      if (!text) {
+        const finish = (out as { choices?: { finish_reason?: unknown }[] } | null)?.choices?.[0]?.finish_reason
+        throw new AiUnavailableError('error', `AI returned no text (finish_reason=${String(finish)})`)
+      }
       const usage = extractUsage(out)
       return { text, model: this.model, ...(usage ? { usage } : {}) }
     } catch (err) {

@@ -12,6 +12,8 @@ const SYSTEM_PROMPT = [
   '- activity_id must be exactly one of the candidate ids.',
   '- reason: one or two short sentences, second person, warm and plain. Use ONLY the facts provided. Never invent history, preferences, places, people, weather or numbers.',
   '- first_step: one concrete action that can start within a minute. You may add one small playful twist that fits the person, but it must stay faithful to the chosen activity.',
+  '- Do not use the words "always", "never" or "again" in the reason.',
+  '- Say "like" or "enjoy", never "love", "passion" or "favorite". Do not assume anything about the person beyond the facts, including what they own.',
   '- No emojis, markdown, links or quotation marks around the whole reply.',
 ].join('\n')
 
@@ -62,7 +64,7 @@ export function buildPrompt(
   }
 
   const user = JSON.stringify(payload) + (retryHint ? `\nYour previous reply was rejected: ${retryHint}. Reply with the JSON object only.` : '')
-  return { request: { system: SYSTEM_PROMPT, user, maxTokens: 400, temperature: 0.4 }, context: { candidates: withFacts, ctx } }
+  return { request: { system: SYSTEM_PROMPT, user, maxTokens: 300, temperature: 0.4 }, context: { candidates: withFacts, ctx } }
 }
 
 // ------------------------------------------------------------------ parsing
@@ -113,8 +115,10 @@ export interface AiChoice {
 export type Validation = { ok: true; choice: AiChoice } | { ok: false; reason: string }
 
 const FORBIDDEN_MARKUP = /https?:\/\/|www\.|[`*#<>[\]{}|]|@\w|\\n|\\"/
-/** Claims about history that only count if our own facts said them. */
-const HISTORY_CLAIMS = /\b(always|never|every time|every day|last time|last week|yesterday|usually|as usual|again|favou?rite|you love|you adore)\b/i
+/** Claims about the person's history that only count if our own facts said them (checked in the reason). */
+const HISTORY_CLAIMS = /\b(always|never|every time|every day|last time|last week|yesterday|usually|as usual|again)\b/i
+/** Overstated or invented feelings and possessions ("you love", "your favorite racket"): checked in BOTH fields. */
+const PREFERENCE_CLAIMS = /\b(favou?rite|loves?|loved|adore[sd]?|passion(?:ate)?|obsess(?:ed)?|dream)\b/i
 
 const numbersIn = (s: string): number[] => (s.match(/\d+/g) ?? []).map(Number)
 
@@ -166,9 +170,22 @@ export function validateChoice(raw: unknown, pc: PromptContext): Validation {
     }
   }
 
+  // A word like "never" is fine when it describes the ACTIVITY ("a place you have never been" is the café walk's own
+  // instruction), but not when it would describe the PERSON. So allow it only if it appears in the chosen
+  // activity's own text or the facts about that activity; any other candidate's text does not count.
+  const chosenText = [...chosen.facts, chosen.scored.activity.firstStep, chosen.scored.activity.title].join(' ')
   const claim = HISTORY_CLAIMS.exec(reason)
-  if (claim && !new RegExp(`\\b${claim[0]}\\b`, 'i').test(factText)) {
+  if (claim && !new RegExp(`\\b${claim[0]}\\b`, 'i').test(chosenText)) {
     return { ok: false, reason: `reason claims "${claim[0]}", which the facts do not support` }
+  }
+  for (const [field, text] of [
+    ['reason', reason],
+    ['first_step', first_step],
+  ] as const) {
+    const overstated = PREFERENCE_CLAIMS.exec(text)
+    if (overstated && !new RegExp(`\\b${overstated[0]}\\b`, 'i').test(knownText)) {
+      return { ok: false, reason: `${field} says "${overstated[0]}", which overstates the facts; use "like" or "enjoy"` }
+    }
   }
 
   // The twist must still be about the chosen activity.

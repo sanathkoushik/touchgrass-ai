@@ -13,7 +13,12 @@ export interface AiRequest {
 export interface AiCompletion {
   text: string
   model: string
-  usage?: { inputTokens: number; outputTokens: number }
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    /** Exact free-tier Neurons spent, when the provider reports it (Workers AI does). */
+    neurons?: number
+  }
 }
 
 /**

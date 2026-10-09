@@ -1,0 +1,8 @@
+{
+  // Used ONLY by `npm run test:live` (live/ai-live.test.ts): a config with just the Workers AI binding,
+  // so the manual real-model checks never touch the main config or the local database.
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "touchgrass-ai-live-test",
+  "compatibility_date": "2026-10-07",
+  "ai": { "binding": "AI" }
+}

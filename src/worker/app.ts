@@ -261,7 +261,7 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppD
           ms: refined.outcome.ms,
           in: refined.outcome.inputTokens,
           out: refined.outcome.outputTokens,
-          neurons_est: refined.outcome.neuronsEstimate && Math.round(refined.outcome.neuronsEstimate * 10) / 10,
+          neurons: refined.outcome.neurons && Math.round(refined.outcome.neurons * 100) / 100,
         }),
       )
       recommendation = refined.recommendation

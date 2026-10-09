@@ -54,6 +54,26 @@ Events older than 180 days are pruned on write to keep storage bounded.
 is guaranteed by the architecture, not by a provider: the deterministic engine produces a full answer every time, and
 the AI only ever improves it. User chose this option (over adding Groq or switching to Claude).
 
+**Measured with the real model (2026-10-09, `npm run test:live`):**
+
+- Gemma 4 is a *reasoning* model. With thinking left on, it spent the whole token budget reasoning and returned an
+  empty answer (400 tokens, 11.6 neurons, `content: null`). With `chat_template_kwargs.enable_thinking = false` the same
+  call took 38 tokens, 1.7 neurons and returned clean JSON. Thinking is therefore always off.
+- Real cost: about **6 neurons per recommendation** (the API reports exact `usage.neurons`), so roughly **1,600
+  recommendations/day** inside the free 10,000-neuron allowance (my earlier estimate of 650 was too pessimistic).
+- 20 controlled scenarios: 20/20 AI-written, 20/20 first try, 0 rejected replies after the fixes below; the AI chose a
+  different activity than the engine's top pick in about 5 of 20 cases.
+- Median latency about 2 s. There is a tail: single calls occasionally take 5-8 s in local dev, so the whole AI step
+  has a hard 6 s budget and falls back to the engine. **Open item: re-measure after the first real deployment and tune.**
+
+**What the validator caught in real replies, and what we changed:**
+
+1. The model wrote "you love X" when the person only said they like X -> rejected (both fields), prompt now says "like/enjoy".
+2. The model invented small details ("your favorite racket", "favorite snacks") -> `PREFERENCE_CLAIMS` check in both fields.
+3. My own check wrongly rejected "a place you have never been" (the cafe walk's own wording) and the forced retry pushed
+   requests past the time budget. Words like "never" are now allowed only if they appear in the CHOSEN activity's own
+   text, never from another candidate. A unit test pins both directions.
+
 ## 003 — The Workers AI binding is opt-in (`TG_AI=1`) (Stage 7, 2026-10-09)
 
 Workers AI has no local emulation. Declaring the `ai` binding in `wrangler.jsonc` made `npm run dev` and every test

@@ -16,8 +16,8 @@ export interface AiOutcome {
   ms: number
   inputTokens?: number
   outputTokens?: number
-  /** Approximate free-tier neurons spent, for budget tracking. */
-  neuronsEstimate?: number
+  /** Free-tier Neurons spent: the exact figure the API reports, else an estimate from token counts. */
+  neurons?: number
   model?: string
 }
 
@@ -68,8 +68,10 @@ export async function refineWithAi(args: RefineArgs): Promise<{ recommendation: 
       if (completion.usage) {
         outcome.inputTokens = (outcome.inputTokens ?? 0) + completion.usage.inputTokens
         outcome.outputTokens = (outcome.outputTokens ?? 0) + completion.usage.outputTokens
-        outcome.neuronsEstimate =
-          (outcome.inputTokens * NEURONS_PER_M_INPUT + (outcome.outputTokens ?? 0) * NEURONS_PER_M_OUTPUT) / 1_000_000
+        outcome.neurons =
+          (outcome.neurons ?? 0) +
+          (completion.usage.neurons ??
+            (completion.usage.inputTokens * NEURONS_PER_M_INPUT + completion.usage.outputTokens * NEURONS_PER_M_OUTPUT) / 1_000_000)
       }
 
       const verdict = validateChoice(extractJsonObject(completion.text), context)
