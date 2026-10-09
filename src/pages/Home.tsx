@@ -1,8 +1,10 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DockNav } from '@/components/DockNav'
 import { PrimaryAction } from '@/components/tg/PrimaryAction'
 import { ScrollBasedVelocity } from '@/components/ui/scroll-based-velocity'
+import { getProfile } from '@/lib/api'
+import { hasProfileHint, setProfileHint } from '@/lib/mission-store'
 
 // Loaded after first paint: the headline and button never wait for the photos.
 const InfiniteImageField = lazy(() =>
@@ -19,6 +21,18 @@ const TICKER =
 export default function Home() {
   const navigate = useNavigate()
   const [compact] = useState(() => window.matchMedia('(max-width: 639px)').matches)
+  // The button is right straight away from a cached hint; the server then confirms in the background.
+  const [hasProfile, setHasProfile] = useState(hasProfileHint)
+  useEffect(() => {
+    const ac = new AbortController()
+    getProfile(ac.signal)
+      .then((p) => {
+        setProfileHint(p !== null)
+        setHasProfile(p !== null)
+      })
+      .catch(() => {})
+    return () => ac.abort()
+  }, [])
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background">
@@ -55,7 +69,9 @@ export default function Home() {
             One real-world mission at a time, picked for you. Then you put the phone down.
           </p>
           <div className="mt-8 flex justify-center">
-            <PrimaryAction onClick={() => navigate('/onboarding')}>Get started</PrimaryAction>
+            <PrimaryAction onClick={() => navigate(hasProfile ? '/plan' : '/onboarding')}>
+              {hasProfile ? 'Plan my next hour' : 'Get started'}
+            </PrimaryAction>
           </div>
         </main>
       </section>

@@ -1,13 +1,14 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { History, Home, ListChecks, Sprout } from 'lucide-react'
+import { Compass, History, Home, ListChecks, Sprout } from 'lucide-react'
 import { MagneticDock } from '@/components/ui/magnetic-dock'
 import { cn } from '@/lib/utils'
 
 const routes = [
   { id: 'home', to: '/', label: 'Home', Icon: Home },
-  { id: 'onboarding', to: '/onboarding', label: 'Preferences', Icon: Sprout },
-  { id: 'feedback', to: '/feedback', label: 'Feedback', Icon: ListChecks },
+  { id: 'plan', to: '/plan', label: 'Plan', Icon: Compass },
+  { id: 'feedback', to: '/feedback', label: 'How it went', Icon: ListChecks },
   { id: 'history', to: '/history', label: 'History', Icon: History },
+  { id: 'onboarding', to: '/onboarding', label: 'Preferences', Icon: Sprout },
 ]
 
 type Props = {

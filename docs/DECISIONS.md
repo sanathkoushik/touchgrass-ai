@@ -74,6 +74,24 @@ the AI only ever improves it. User chose this option (over adding Groq or switch
    requests past the time budget. Words like "never" are now allowed only if they appear in the CHOSEN activity's own
    text, never from another candidate. A unit test pins both directions.
 
+## 004 — The screen shows the engine's pick first and upgrades it with the AI (Stage 8, 2026-10-09)
+
+The AI step is usually ~2 s but has a tail of 5-8 s, and the report demands that nothing blocks the screen. So the UI
+is two calls, not one: `POST /api/recommend {use_ai:false}` (engine pick, shown immediately) then
+`POST /api/recommend/:id/upgrade` (Gemma improves that same recommendation, at most once, 6 s budget).
+
+Measured in a real browser with real Gemma: engine pick on screen at ~0.8 s, AI wording faded in at ~2.8 s.
+
+Rules that keep it trustworthy:
+- A late AI answer is applied only if that exact recommendation is still on screen and the person has not tapped
+  "Let's go"; otherwise it is dropped. The card never changes under someone who has already decided.
+- If the AI picks a different activity, the stored event is updated in place, so history and feedback always match
+  what the person actually saw.
+- Failures are invisible: the pill "Personalizing…" simply disappears and the engine pick stays.
+- Costs: the first call is free of AI; the upgrade is one attempt per recommendation (marked in `context.upgrade`).
+  A bot could still spend the free daily quota by creating many recommendations; the app then degrades to the
+  engine. Rate limiting is part of deployment hardening (Phase 12).
+
 ## 003 — The Workers AI binding is opt-in (`TG_AI=1`) (Stage 7, 2026-10-09)
 
 Workers AI has no local emulation. Declaring the `ai` binding in `wrangler.jsonc` made `npm run dev` and every test

@@ -19,6 +19,11 @@ export interface StoredEvent {
     hour: number
     /** Filled in once weather is wired up (Phase 9). */
     weather?: string
+    /**
+     * Set once the AI upgrade has been tried for this recommendation, so it is tried at most once
+     * (protects the free daily AI quota): 'ai' = wording/choice upgraded, 'failed' = AI could not help.
+     */
+    upgrade?: 'ai' | 'failed'
   }
 }
 

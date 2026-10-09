@@ -10,6 +10,7 @@ import {
   profileInputSchema,
   profilePatchSchema,
   recommendInputSchema,
+  recommendationIdSchema,
   sessionIdSchema,
   type ApiErrorBody,
   type FeedbackResponse,
@@ -19,6 +20,7 @@ import {
   type ProfileStats,
   type RecommendResponse,
   type StoredProfile,
+  type UpgradeResponse,
 } from '@/shared/api'
 import { getActivity, planDeterministic } from '@/shared/engine'
 import type { Context as EngineContext, HistoryEvent, UserProfile } from '@/shared/engine/types'
@@ -284,6 +286,82 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai }: AppD
     }
 
     const body: RecommendResponse = { recommendation_id: recommendationId, ...recommendation, persisted }
+    return c.json(body)
+  })
+
+  // ---- upgrade: let the AI improve a recommendation the screen has ALREADY shown (engine pick first, AI second)
+  app.post('/api/recommend/:id/upgrade', async (c) => {
+    const repo = repoOf(c)
+    const userKey = c.get('userKey')
+    const id = recommendationIdSchema.safeParse(c.req.param('id'))
+    if (!id.success) return c.json(errorBody('invalid_request', 'Invalid recommendation id'), 400)
+
+    // Looked up under THIS user's key, like feedback: nobody can upgrade someone else's recommendation.
+    const event = await repo.getEvent(userKey, id.data)
+    if (!event) return c.json(errorBody('recommendation_not_found', 'No such recommendation for this session'), 404)
+    // Once the user has answered, the record is history: never rewrite it.
+    if (event.outcome !== 'pending') return c.json(errorBody('already_answered', 'This recommendation has already been answered'), 409)
+
+    const notUpgraded = (reason: NonNullable<UpgradeResponse['reason']>) => c.json<UpgradeResponse>({ upgraded: false, reason })
+    // Each recommendation gets at most ONE upgrade attempt, so a client cannot burn the free AI quota by retrying.
+    if (event.context.upgrade) return notUpgraded('already_attempted')
+
+    const provider = ai?.provider(c.env) ?? null
+    if (!provider) return notUpgraded('ai_unavailable')
+    if (!aiGate.canTry(now().getTime())) return notUpgraded('ai_cooling_down')
+
+    const profile = await repo.getProfile(userKey)
+    if (!profile) return c.json(errorBody('profile_not_found', 'No profile yet. Complete onboarding first.'), 404)
+
+    // Rebuild exactly what the user was shown from the context stored with the recommendation.
+    const ctx: EngineContext = {
+      duration_limit: event.context.duration_limit,
+      social_available: event.context.social_available,
+      mood: event.context.mood,
+      hour: event.context.hour,
+    }
+    const engineProfile = toEngineProfile(userKey, profile)
+    const history = toHistory(await repo.listEvents(userKey, HISTORY_WINDOW))
+    const planned = planDeterministic(engineProfile, ctx, history)
+    const refined = await refineWithAi({
+      provider,
+      profile: engineProfile,
+      ctx,
+      ranking: planned.ranking,
+      deterministic: planned.recommendation,
+      timeoutMs: ai?.timeoutMs,
+    })
+    aiGate.record(refined.outcome.status, now().getTime())
+    console.log(
+      JSON.stringify({
+        t: 'ai',
+        phase: 'upgrade',
+        status: refined.outcome.status,
+        attempts: refined.outcome.attempts,
+        ms: refined.outcome.ms,
+        in: refined.outcome.inputTokens,
+        out: refined.outcome.outputTokens,
+        neurons: refined.outcome.neurons && Math.round(refined.outcome.neurons * 100) / 100,
+      }),
+    )
+
+    const ok = refined.outcome.status === 'ok'
+    try {
+      await repo.updateEvent(userKey, {
+        ...event,
+        activity_id: ok ? refined.recommendation.activity_id : event.activity_id,
+        context: { ...event.context, upgrade: ok ? 'ai' : 'failed' },
+      })
+    } catch (err) {
+      // If we cannot save the upgraded choice, do not show it: the screen and the record must agree.
+      console.error(JSON.stringify({ t: 'persist_failed', where: 'upgrade', message: String((err as Error)?.message ?? err) }))
+      return notUpgraded('ai_failed')
+    }
+    if (!ok) return notUpgraded('ai_failed')
+    const body: UpgradeResponse = {
+      upgraded: true,
+      recommendation: { recommendation_id: id.data, ...refined.recommendation, persisted: true },
+    }
     return c.json(body)
   })
 

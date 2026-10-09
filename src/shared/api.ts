@@ -97,6 +97,22 @@ export interface RecommendResponse extends Recommendation {
   persisted: boolean
 }
 
+// ----------------------------------------------------------------- upgrade
+
+export const recommendationIdSchema = z.string().regex(/^r_[0-9a-f-]{36}$/, 'invalid recommendation id')
+
+/**
+ * Result of asking the AI to improve a recommendation that was already shown.
+ * `upgraded: false` is a normal, successful answer: the screen simply keeps what it has.
+ */
+export interface UpgradeResponse {
+  upgraded: boolean
+  /** Why nothing changed. Only present when `upgraded` is false. */
+  reason?: 'ai_unavailable' | 'ai_cooling_down' | 'already_attempted' | 'ai_failed'
+  /** The improved recommendation (same `recommendation_id`). Only present when `upgraded` is true. */
+  recommendation?: RecommendResponse
+}
+
 // ---------------------------------------------------------------- feedback
 
 export const feedbackInputSchema = z

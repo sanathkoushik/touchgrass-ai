@@ -22,6 +22,7 @@ Hono on a Cloudflare Worker. Source: `src/worker/`. Contract (validation + types
 | PATCH | `/api/profile` | Partial update (preferences are merged field by field). |
 | DELETE | `/api/profile` | Delete the profile and all events. |
 | POST | `/api/recommend` | One recommendation. Needs a profile (404 `profile_not_found` otherwise). |
+| POST | `/api/recommend/:id/upgrade` | Ask the AI to improve a recommendation that is already on screen. Once per recommendation. |
 | POST | `/api/feedback` | Report `completed` / `partial` / `skipped` / `changed`. May be corrected later. |
 | GET | `/api/history?limit=20` | Recent recommendations with outcomes, newest first. |
 
@@ -47,6 +48,24 @@ duration and social mode always come from the catalog. The reply is validated (m
 links, markdown, invented numbers or invented history; first step must match the activity), retried once, and on any
 failure, timeout, busy signal or exhausted quota the deterministic answer is returned unchanged. Clients never see
 an AI error. After a failure the Worker skips the AI for a while (30 s busy, 10 s error, until 00:00 UTC for quota).
+
+### POST /api/recommend/:id/upgrade  (engine pick first, AI second)
+
+This is how the website avoids ever waiting on the AI. The screen calls `/api/recommend` with `use_ai: false`, shows
+the engine's pick at once, then calls this endpoint to let Gemma improve **that same recommendation**.
+
+Always `200` with `{ "upgraded": false, "reason": ... }` when the AI cannot help, so the screen just keeps what it has:
+
+| `reason` | Meaning |
+|---|---|
+| `ai_unavailable` | No AI is configured (plain `npm run dev`). Answered instantly. |
+| `ai_cooling_down` | The AI recently failed or is out of quota; not even tried. |
+| `already_attempted` | This recommendation was already upgraded (or tried). Each gets **one** attempt, so retrying cannot burn the free quota. |
+| `ai_failed` | The AI timed out, was busy, or its reply failed validation. |
+
+When `upgraded` is true, `recommendation` carries the same `recommendation_id` with new wording (and possibly a
+different activity, which is then also what history and feedback refer to). Errors: `404` unknown id / not yours,
+`409 already_answered` (answered recommendations are history and are never rewritten), `400` bad id.
 
 ### POST /api/feedback
 

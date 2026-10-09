@@ -107,10 +107,19 @@ export class D1Repository implements Repository {
   async updateEvent(userKey: string, event: StoredEvent): Promise<void> {
     const result = await this.db
       .prepare(
-        `UPDATE events SET outcome = ?, enjoyment = ?, skip_reason = ?, responded_at = ?
+        `UPDATE events SET activity_id = ?, outcome = ?, enjoyment = ?, skip_reason = ?, responded_at = ?, context = ?
          WHERE user_key = ? AND recommendation_id = ?`,
       )
-      .bind(event.outcome, event.enjoyment ?? null, event.skip_reason ?? null, event.responded_at ?? null, userKey, event.recommendation_id)
+      .bind(
+        event.activity_id,
+        event.outcome,
+        event.enjoyment ?? null,
+        event.skip_reason ?? null,
+        event.responded_at ?? null,
+        JSON.stringify(event.context),
+        userKey,
+        event.recommendation_id,
+      )
       .run()
     if (result.meta.changes === 0) throw new Error('event not found')
   }

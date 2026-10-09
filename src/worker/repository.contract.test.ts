@@ -109,6 +109,20 @@ describe.each(STORAGE_KINDS)('Repository contract: %s', (kind) => {
       expect('skip_reason' in got!).toBe(false)
     })
 
+    it('can change the activity and context of a pending event (AI upgrade) without touching its identity', async () => {
+      await repo.addEvent(U1, event('1'))
+      const upgraded = event('1', {
+        activity_id: 'photo_walk_challenge',
+        context: { duration_limit: 60, mood: 'ok', social_available: false, hour: 17, upgrade: 'ai' },
+      })
+      await repo.updateEvent(U1, upgraded)
+      const got = await repo.getEvent(U1, 'r_1')
+      expect(got).toStrictEqual(upgraded)
+      expect((await repo.listEvents(U1, 10)).length).toBe(1)
+      // The update is scoped by user: another user's identical id is not affected.
+      await expect(repo.updateEvent(U2, upgraded)).rejects.toThrow()
+    })
+
     it('refuses to update an event that does not exist, or belongs to someone else', async () => {
       await expect(repo.updateEvent(U1, event('nope', { outcome: 'completed' }))).rejects.toThrow()
       await repo.addEvent(U1, event('1'))

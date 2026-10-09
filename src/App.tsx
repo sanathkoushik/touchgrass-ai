@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/components/AppLayout'
 import Home from '@/pages/Home'
 import Onboarding from '@/pages/Onboarding'
+import Plan from '@/pages/Plan'
 import Feedback from '@/pages/Feedback'
 import History from '@/pages/History'
 import NotFound from '@/pages/NotFound'
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="welcome" element={<Navigate to="/" replace />} />
         <Route element={<AppLayout />}>
           <Route path="onboarding" element={<Onboarding />} />
+          <Route path="plan" element={<Plan />} />
           <Route path="feedback" element={<Feedback />} />
           <Route path="history" element={<History />} />
           {DevUi && (

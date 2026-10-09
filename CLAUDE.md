@@ -52,3 +52,12 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Tests use scripted fake providers. Real-model checks are manual because they spend the free daily quota: `npm run test:live` (20 scenarios, ~120 neurons; `TG_LIVE_N`, `TG_LIVE_ONLY`, `TG_LIVE_REPEAT` narrow it) and `node live/probe.mjs` (prints one raw reply). Re-run `test:live` after ANY change to the prompt, the validator or the model.
 - Gemma 4 must be called with `chat_template_kwargs: { enable_thinking: false }`; with thinking on it returns an empty answer and wastes ~7x the neurons. Do not remove it.
 - The whole AI step has a 6 s budget (`refineWithAi` default). Use the exact `usage.neurons` the API reports for budgeting.
+
+## Screens (Stage 8: src/pages, src/hooks, src/lib)
+- The browser talks to the server ONLY through `src/lib/api.ts` (typed, with timeouts, errors as `ApiError`). Never call `fetch` from a component.
+- The mission flow lives in `useMission`: engine pick first (`use_ai:false`), then ONE background `upgrade`. The AI step must never block the screen, and a late upgrade must be dropped if the person has already acted. Do not "simplify" this into a single awaited AI call.
+- All user-facing wording for engine values lives in `src/lib/vocab.ts` as `Record<Union, ...>`, so a new motivator/equipment/skip reason fails to compile until it has a label. Every interest chip must match a real activity tag (a test enforces it).
+- Screens must render something useful immediately; profile/history load in the background (skeletons the same size as the final content, to avoid layout shift).
+- Wording stays guilt-free: no streaks, no red failure marks, "Did not go" not "Failed".
+- `PrimaryAction` sets one explicit accessible name (the Halo button splits its label into per-letter spans).
+- Browser-test with plain `npm run dev`; use `npm run dev:ai` only to see the real AI upgrade (it spends free quota). Delete test data afterwards (`npm run db:reset:local` or DELETE /api/profile).
