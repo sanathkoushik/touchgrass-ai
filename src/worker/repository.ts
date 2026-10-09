@@ -1,5 +1,5 @@
 import type { StoredProfile } from '@/shared/api'
-import type { Mood, Outcome, SkipReason, WeatherCategory } from '@/shared/engine/types'
+import type { ActivityMode, ModeCause, Mood, Outcome, SkipReason, WeatherCategory } from '@/shared/engine/types'
 
 /** One recommendation and what happened to it. `pending` until the user reports back. */
 export interface StoredEvent {
@@ -17,6 +17,9 @@ export interface StoredEvent {
     mood: Mood
     social_available: boolean
     hour: number
+    /** How big this recommendation was, and why, so the AI upgrade rebuilds the same situation. */
+    mode?: ActivityMode
+    mode_cause?: ModeCause
     /** Live conditions used for this recommendation. Only the category and temperature: never coordinates. */
     weather?: { category: WeatherCategory; temp_c: number }
     /** True/false when real daylight was known; absent when not. */

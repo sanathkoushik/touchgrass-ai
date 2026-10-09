@@ -49,6 +49,8 @@ const MISSION = {
   fallback: null,
   source: 'deterministic' as const,
   persisted: true,
+  mode: 'normal' as const,
+  preparation: [] as string[],
 }
 
 afterEach(() => {

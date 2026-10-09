@@ -66,3 +66,10 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Weather comes only through `ContextProvider` (Open-Meteo). Any failure means "no weather", never an error to the client.
 - Coordinates are rounded (`roundCoord`) and are NEVER stored, logged, or put in the AI prompt. Store only weather category/temp and daylight.
 - Location is requested only from a user tap. The app must stay non-commercial while on the free Open-Meteo plan, and keep the attribution visible.
+
+## Behavioural learning and places (Stage 10)
+- Modes live in `src/shared/engine/modes.ts`. Unanswered recommendations are neutral. The person's chosen mode always beats `auto`. Never add shame wording (no "failed", "lazy", "should", streaks).
+- Any sentence in a reason must come from `ScoredActivity.evidence`; add the evidence field first, then the sentence, then a test that it is NOT said when the evidence is absent.
+- Zod: never wrap a `.default()` schema in `.optional()` for PATCH schemas; build the PATCH from the plain schema (see `goalList`/`windowList` in api.ts).
+- Places: `OverpassProvider` + `PlaceCache` (src/worker/context). Queries are built from constants only, nodes and ways only (relations time out), always with a User-Agent. Do not hammer the public server when testing: it rate-limits (429) and the real feature depends on caching. Live probes belong in `live/`, run sparingly.
+- Migrations so far: 0001 init, 0002 place_cache. Run `npm run db:migrate:remote` before deploying.

@@ -29,7 +29,7 @@ What is the best next real-world action for THIS person, at THIS time, under THE
 - No social network or feed.
 - No automatic phone blocking.
 - No custom model fine-tuning.
-- No giant maps/search system (maps are deferred until the core loop is useful without them).
+- No giant maps/search system. (Stage 10 adds only a short optional list of real nearby place names from OpenStreetMap, once the core loop was useful without it: see DECISIONS 007.)
 - No streaks/points/badge gamification.
 - No paid services or Pro-only UI components.
 

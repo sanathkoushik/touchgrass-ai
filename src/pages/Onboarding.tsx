@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ProfileInput } from '@/shared/api'
-import type { Avoidance, Equipment, Motivator, SocialPreference } from '@/shared/engine/types'
-import { AVOIDANCES, EQUIPMENT, MOTIVATORS, SOCIAL_PREFERENCES } from '@/shared/engine/types'
+import type { Avoidance, Equipment, Goal, Motivator, SocialPreference } from '@/shared/engine/types'
+import { AVOIDANCES, EQUIPMENT, GOALS, MOTIVATORS, SOCIAL_PREFERENCES } from '@/shared/engine/types'
 import { ChoiceGroup } from '@/components/tg/ChoiceGroup'
 import { PreferenceChip } from '@/components/tg/PreferenceChip'
 import { PrimaryAction } from '@/components/tg/PrimaryAction'
@@ -15,6 +15,7 @@ import {
   AVOIDANCE_LABELS,
   DURATION_CHOICES,
   EQUIPMENT_LABELS,
+  GOAL_LABELS,
   INTERESTS,
   MOTIVATOR_LABELS,
   SOCIAL_LABELS,
@@ -46,6 +47,7 @@ export default function Onboarding() {
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [avoidances, setAvoidances] = useState<Avoidance[]>([])
   const [windows, setWindows] = useState<string[]>([])
+  const [goals, setGoals] = useState<Goal[]>([])
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +68,7 @@ export default function Onboarding() {
     setEquipment(e)
     setAvoidances(a)
     setWindows(schedule_signals.best_windows)
+    setGoals(state.data.profile.goals ?? [])
   }, [state])
 
   // A thing cannot be both liked and disliked: choosing one side clears the other.
@@ -86,6 +89,7 @@ export default function Onboarding() {
       motivators,
       avoidances,
       equipment,
+      goals,
       best_windows: windows,
     }
     try {
@@ -150,6 +154,14 @@ export default function Onboarding() {
         <legend className="font-display text-xl font-medium tracking-tight">Who do you like to go with?</legend>
         <ChoiceGroup label="Company" options={socialOptions} value={social} onChange={setSocial} />
       </fieldset>
+
+      <Section title="What do you want out of this?" hint="Optional. A nudge, never a rule: what you actually do counts more.">
+        {GOALS.map((g) => (
+          <PreferenceChip key={g} selected={goals.includes(g)} onToggle={() => setGoals((l) => toggle(l, g))}>
+            {GOAL_LABELS[g]}
+          </PreferenceChip>
+        ))}
+      </Section>
 
       <Section title="What makes you want to go?" hint="The reasons that would actually get you off the sofa.">
         {MOTIVATORS.map((m) => (

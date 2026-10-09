@@ -32,3 +32,6 @@ Unsplash+ (premium) images are NOT used. A pink/purple galaxy image from the com
 
 ## Open-Meteo
 Weather and geocoding data by Open-Meteo.com (https://open-meteo.com), licensed CC BY 4.0, free for non-commercial use.
+
+## OpenStreetMap / Overpass API
+Nearby place names come from OpenStreetMap data, (c) OpenStreetMap contributors, available under the Open Database Licence (ODbL) 1.0: https://www.openstreetmap.org/copyright . Queried through the public Overpass API (https://overpass-api.de).

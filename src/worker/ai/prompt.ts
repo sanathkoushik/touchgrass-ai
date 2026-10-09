@@ -51,6 +51,7 @@ export function buildPrompt(
     now: {
       minutes_available: ctx.duration_limit,
       energy: ctx.mood,
+      size: ctx.mode ?? 'normal',
       friend_free: ctx.social_available,
       local_hour: ctx.hour,
       // Real conditions, only when we have them. The model may mention these but must not invent any others.

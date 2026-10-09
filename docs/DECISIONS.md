@@ -109,3 +109,21 @@ run fail without a Cloudflare login (and would spend free quota on every dev ses
 - Resilience: 2 s timeout, 10-minute cache per ~1 km cell, 30 s cool-down after an outage; any failure means "plan without weather", never an error. Unknown WMO codes are not guessed.
 - The place's own UTC offset drives "local hour", so daylight and late-night rules are right for the place chosen.
 - Venue/map search (real nearby places) is NOT part of this stage; planned later as an optional improvement (OpenStreetMap).
+
+## 006 - Behavioural learning and the size of the day (Stage 10)
+- Report Phase 10 asks for completion/enjoyment signals, skip reasons, "likes X" separate from "X works at this time", minimum/normal/excellent modes, and observed behaviour over stated preference. Most signals already existed in the scorer; Stage 10 adds the modes and makes the learning VISIBLE in the reason line.
+- **Modes** (`src/shared/engine/modes.ts`): minimum = the activity's shortest real version, nothing intense or far; excellent = as long as the time allows. `chooseMode` picks automatically ("immediate recovery" after two skipped answers) and the person's own choice always wins. Explanations name the real cause ("Your last two did not happen, so this one is small on purpose.") with no guilt wording.
+- **Unanswered recommendations are neutral**: not answering is not a skip, so it never lowers a score or triggers a small start. (Revisit if people never answer; the alternative would be a mild repeat penalty.)
+- **Goals** (report 7.1): optional, a +0.15 nudge per supported goal on the starting belief only. Real behaviour still overrides them (tested).
+- **Reasons from evidence only**: "finished this N of M", "rated this X out of 5" (only 4+), "you said the last one was too far; this needs no travel" (only the most recent skip, only when the activity truly fixes it).
+- **History** shows "What we have noticed" (best part of the day, best kind of activity, most common reason, favourite), each with its counts and only when there is enough data (3+ answers in a group).
+- Bug found and fixed while testing: a PATCH that omitted `goals`/`best_windows` reset them to empty (zod `.default()` wrapped in `.optional()` still applies the default). Regression-tested.
+- Deviation from the report's example event: stored `context.weather` is `{category, temp_c}` (not a bare string) and events also keep `mode`, `mode_cause` and `is_daylight`, so an AI upgrade rebuilds the same situation.
+
+## 007 - Nearby places from OpenStreetMap (Stage 10)
+- The report says "do not add maps/search until the core loop is useful without them" and lists "no giant maps system" as a non-goal. The core loop has been useful since Stage 8, and this stays small: up to three real place names with distances for the suggested activity, optional, loaded after the mission is on screen, with a link to the OSM entry. No map is drawn.
+- Source: the public Overpass API (free, no key, ODbL). Attribution "OpenStreetMap contributors" is shown wherever places appear. Overpass requires a User-Agent (without one it answers 406).
+- **Measured reality (2026-10-09):** the shared server is best-effort. The same query alternates between HTTP 200 (about 1 to 3 s) and 504 (after about 8 s), and my own testing triggered 429 rate limits. Queries that include relations time out in dense cities, so queries use nodes and ways only (large lakes and reserves mapped only as relations can be missed).
+- **So reliability comes from caching, not hope:** per-instance memory (6 h), then a shared D1 table `place_cache` (24 h fresh; entries up to 14 days old are served if OpenStreetMap is down), a 60 s cool-down for the whole service on 429/503/network errors, and a 60 s cool-down for only the affected kind on a timeout or 504. No user id is stored in the cache; it holds public place names per ~1 km cell.
+- Privacy: only the rounded location and a kind of place go to Overpass; the consent text names OpenStreetMap.
+- Overpass policy: an app's queries count together across all its users, so very heavy use needs another provider or a self-hosted instance.

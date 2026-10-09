@@ -22,12 +22,15 @@ import {
   type StoredProfile,
   type UpgradeResponse,
 } from '@/shared/api'
-import { getActivity, planDeterministic } from '@/shared/engine'
+import { chooseMode, getActivity, planDeterministic } from '@/shared/engine'
 import type { Context as EngineContext, HistoryEvent, UserProfile } from '@/shared/engine/types'
 import { contextInputSchema, placesInputSchema, roundLocation, type ConditionsSummary, type ContextResponse, type Location, type PlacesResponse } from '@/shared/context'
 import { AiGate } from './ai/gate'
 import type { AiProvider } from './ai/provider'
 import { refineWithAi } from './ai/refine'
+import type { NearbyProvider } from './context/overpass'
+import type { PlaceCache } from './context/place-cache'
+import { PLACE_KINDS, nearbyInputSchema, placeKindFor, type NearbyResponse } from '@/shared/places'
 import type { Conditions, ContextProvider } from './context/provider'
 import type { Repository, StoredEvent } from './repository'
 import { localClock, offsetFromTimeZone } from './time'
@@ -48,6 +51,10 @@ export interface AppDeps {
   }
   /** Live weather and place search. Without it the app plans without weather. */
   context?: ContextProvider
+  /** Real nearby places (OpenStreetMap). Without it the app simply shows no places. */
+  places?: NearbyProvider
+  /** Shared cache for those places (D1), so the busy public server is asked as rarely as possible. */
+  placeCache?: (env: Env) => PlaceCache
 }
 
 type AppEnv = {
@@ -89,6 +96,7 @@ function toStoredProfile(input: ProfileInput, now: Date): StoredProfile {
     motivators: input.motivators,
     avoidances: input.avoidances,
     equipment: input.equipment,
+    goals: input.goals,
     schedule_signals: { best_windows: input.best_windows },
     updated_at: now.toISOString(),
   }
@@ -101,6 +109,7 @@ function toEngineProfile(userKey: string, p: StoredProfile): UserProfile {
     motivators: p.motivators,
     avoidances: p.avoidances,
     equipment: p.equipment,
+    goals: p.goals ?? [],
   }
 }
 
@@ -155,7 +164,7 @@ function resolveOffsetMinutes(c: HonoContext<AppEnv>, clientOffset: number | und
 
 // ---------------------------------------------------------------------- app
 
-export function createApp({ repo: repoSource, now = () => new Date(), ai, context }: AppDeps) {
+export function createApp({ repo: repoSource, now = () => new Date(), ai, context, places: placesProvider, placeCache }: AppDeps) {
   const app = new Hono<AppEnv>()
   const aiGate = ai?.gate ?? new AiGate()
   const repoOf = (c: HonoContext<AppEnv>): Repository => (typeof repoSource === 'function' ? repoSource(c.env) : repoSource)
@@ -224,6 +233,7 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
       motivators: patch.motivators ?? existing.motivators,
       avoidances: patch.avoidances ?? existing.avoidances,
       equipment: patch.equipment ?? existing.equipment,
+      goals: patch.goals ?? existing.goals ?? [],
       schedule_signals: { best_windows: patch.best_windows ?? existing.schedule_signals.best_windows },
       updated_at: now().toISOString(),
     }
@@ -256,15 +266,19 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
     // The place's own clock when we know it (so "daylight" and "late at night" are right THERE), else the browser's.
     const offsetMinutes = conditions ? Math.round(conditions.utc_offset_seconds / 60) : resolveOffsetMinutes(c, input.utc_offset_minutes, at)
     const clock = localClock(at, offsetMinutes)
+    const history = toHistory(await repo.listEvents(userKey, HISTORY_WINDOW))
+    // The person's own choice wins; otherwise adapt to their energy and what has happened lately.
+    const sizing = input.mode === 'auto' ? chooseMode(history, input.mood) : { mode: input.mode, cause: 'chosen' as const }
     const ctx: EngineContext = {
       duration_limit: input.duration_limit,
       social_available: input.social_available,
       mood: input.mood,
+      mode: sizing.mode,
+      ...(sizing.cause ? { mode_cause: sizing.cause } : {}),
       hour: clock.hour,
       ...(conditions ? { weather: { category: conditions.category, temp_c: conditions.temp_c }, is_daylight: conditions.is_day } : {}),
     }
 
-    const history = toHistory(await repo.listEvents(userKey, HISTORY_WINDOW))
     const engineProfile = toEngineProfile(userKey, profile)
     const planned = planDeterministic(engineProfile, ctx, history)
     let recommendation = planned.recommendation
@@ -311,6 +325,8 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
           mood: ctx.mood,
           social_available: ctx.social_available,
           hour: ctx.hour,
+          ...(ctx.mode ? { mode: ctx.mode } : {}),
+          ...(ctx.mode_cause ? { mode_cause: ctx.mode_cause } : {}),
           ...(ctx.weather ? { weather: ctx.weather } : {}),
           ...(typeof ctx.is_daylight === 'boolean' ? { is_daylight: ctx.is_daylight } : {}),
         },
@@ -356,6 +372,8 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
       social_available: event.context.social_available,
       mood: event.context.mood,
       hour: event.context.hour,
+      ...(event.context.mode ? { mode: event.context.mode } : {}),
+      ...(event.context.mode_cause ? { mode_cause: event.context.mode_cause } : {}),
       ...(event.context.weather ? { weather: event.context.weather } : {}),
       ...(typeof event.context.is_daylight === 'boolean' ? { is_daylight: event.context.is_daylight } : {}),
     }
@@ -477,6 +495,25 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
       places = null
     }
     const body: PlacesResponse = { available: places !== null, places: places ?? [] }
+    return c.json(body)
+  })
+
+  // ---- nearby: a few real places for the suggested activity, from OpenStreetMap
+  app.post('/api/nearby', validate('json', nearbyInputSchema), async (c) => {
+    const input = c.req.valid('json')
+    const kind = placeKindFor(input.activity_id)
+    // Activities that do not happen at a kind of place (home, any street) have nothing to look up.
+    if (!kind) return c.json({ available: true, places: [] } satisfies NearbyResponse)
+    const loc = roundLocation(input.location)
+    let found = null
+    try {
+      found = placesProvider ? await placesProvider.nearby(kind, loc.lat, loc.lon, placeCache?.(c.env)) : null
+    } catch {
+      found = null
+    }
+    const body: NearbyResponse = found
+      ? { available: true, kind: { id: kind, label: PLACE_KINDS[kind].label }, places: found }
+      : { available: false, places: [] }
     return c.json(body)
   })
 

@@ -1,4 +1,5 @@
 import type { ContextResponse, Location, PlacesResponse } from '@/shared/context'
+import type { NearbyResponse } from '@/shared/places'
 import type {
   ApiErrorBody,
   FeedbackInput,
@@ -104,6 +105,10 @@ export const getConditions = (location: Location, signal?: AbortSignal) =>
 /** City search, the alternative to sharing the device location. */
 export const searchPlaces = (q: string, signal?: AbortSignal) =>
   request<PlacesResponse>('POST', '/api/places', { body: { q }, signal, timeoutMs: 8_000 })
+
+/** A few real places near the shared location for this activity (OpenStreetMap). Optional; never blocks the mission. */
+export const getNearby = (location: Location, activityId: string, signal?: AbortSignal) =>
+  request<NearbyResponse>('POST', '/api/nearby', { body: { location, activity_id: activityId }, signal, timeoutMs: 9_000 })
 
 export const sendFeedback = (input: FeedbackInput) => request<FeedbackResponse>('POST', '/api/feedback', { body: input })
 export const getHistory = (limit = 30, signal?: AbortSignal) => request<HistoryResponse>('GET', `/api/history?limit=${limit}`, { signal })

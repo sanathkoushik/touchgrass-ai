@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RecommendResponse } from '@/shared/api'
 import type { Location } from '@/shared/context'
-import type { Mood, SkipReason } from '@/shared/engine/types'
+import type { ActivityMode, Mood, SkipReason } from '@/shared/engine/types'
 import { ApiError, recommend, sendFeedback, upgradeRecommendation } from '@/lib/api'
 import { clearMission, loadMission, saveMission } from '@/lib/mission-store'
 
@@ -9,6 +9,8 @@ export interface PlanContext {
   duration_limit: number
   mood: Mood
   social_available: boolean
+  /** 'auto' lets the server adapt to energy and recent history. */
+  mode?: 'auto' | ActivityMode
   /** Only when the person shared one. Rounded; used for the weather lookup and never stored. */
   location?: Location
 }

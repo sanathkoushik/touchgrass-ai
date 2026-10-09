@@ -97,6 +97,13 @@ export interface Preferences {
   social_preference: SocialPreference
 }
 
+/**
+ * What the person is trying to get out of this, in their own words. Optional: it only nudges scoring,
+ * it never overrides what they actually do.
+ */
+export const GOALS = ['move_more', 'be_outdoors', 'feel_calmer', 'meet_people', 'try_new_things', 'be_creative'] as const
+export type Goal = (typeof GOALS)[number]
+
 export const AVOIDANCES = ['too_far', 'high_cost'] as const
 export type Avoidance = (typeof AVOIDANCES)[number]
 
@@ -105,6 +112,8 @@ export interface UserProfile {
   preferences: Preferences
   motivators: Motivator[]
   avoidances: Avoidance[]
+  /** Optional; profiles saved before goals existed simply have none. */
+  goals?: Goal[]
   /** Gear the user actually owns. */
   equipment: Equipment[]
 }
@@ -144,6 +153,18 @@ export interface Weather {
   temp_c: number
 }
 
+/**
+ * How big today's activity should be (the report's minimum / normal / excellent days).
+ *  minimum   - the smallest real version: shortest length, low effort, nothing far away
+ *  normal    - the usual suggestion
+ *  excellent - a stretch: as long as the time allows, a little more ambitious
+ */
+export const ACTIVITY_MODES = ['minimum', 'normal', 'excellent'] as const
+export type ActivityMode = (typeof ACTIVITY_MODES)[number]
+
+/** Why a mode was used, so the explanation can be true: asked for, recovery after skips, low energy, or momentum. */
+export type ModeCause = 'chosen' | 'recovery' | 'low_energy' | 'momentum'
+
 export const MOODS = ['low', 'ok', 'high'] as const
 export type Mood = (typeof MOODS)[number]
 
@@ -153,6 +174,9 @@ export interface Context {
   /** Is someone free to join right now? */
   social_available: boolean
   mood: Mood
+  /** Defaults to 'normal'. */
+  mode?: ActivityMode
+  mode_cause?: ModeCause
   /** Local hour 0-23. */
   hour: number
   /** Real daylight if known (e.g. from sunrise/sunset); otherwise derived from the hour. */
@@ -192,6 +216,13 @@ export interface ScoredActivity {
     observed_n: number
     observed_done: number
     declared_like: string | null
+    /** A stated goal this activity supports, if any. */
+    declared_goal: Goal | null
+    /** Average enjoyment (1-5) the person gave THIS activity, with how many ratings it is based on. */
+    observed_enjoyment_avg: number | null
+    observed_enjoyment_n: number
+    /** The most recent skip reason (last 3 events) that this activity specifically avoids, e.g. too_far -> no travel. */
+    addresses_skip: SkipReason | null
     recently_suggested: boolean
     /** How many past events existed when scoring. Zero means "no history", so no claims about it. */
     history_size: number
@@ -206,6 +237,10 @@ export interface Recommendation {
   reason: string
   first_step: string
   social_mode: SocialMode
+  /** How big this one is (see ActivityMode). */
+  mode: ActivityMode
+  /** What to have ready, derived from the activity's real equipment and optional extras. May be empty. */
+  preparation: string[]
   /** A second, safer option when there is one. */
   fallback: { activity_id: string; title: string; first_step: string } | null
   /** Where this came from, so the UI and logs can tell the difference. */

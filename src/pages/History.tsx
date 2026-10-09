@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import type { HistoryItem, ProfileStats } from '@/shared/api'
 import { Button } from '@/components/ui/button'
 import { ApiError, getHistory, getProfile } from '@/lib/api'
+import { summarizeLearning } from '@/lib/insights'
 import { cn } from '@/lib/utils'
 
 const OUTCOME_LABEL: Record<HistoryItem['outcome'], string> = {
@@ -64,6 +65,8 @@ export default function History() {
     return [...counts.values()].sort((a, b) => b.n - a.n).slice(0, 5)
   }, [items])
 
+  const noticed = useMemo(() => summarizeLearning(items ?? []), [items])
+
   return (
     <section className="space-y-8">
       <div>
@@ -103,6 +106,18 @@ export default function History() {
               <Tile value={String(stats.responded)} label="answered" />
               <Tile value={String(stats.completed)} label="finished" />
               <Tile value={stats.completion_rate === null ? '–' : `${Math.round(stats.completion_rate * 100)}%`} label="of answered missions finished" />
+            </div>
+          )}
+
+          {noticed.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="font-display text-xl font-medium">What we have noticed</h2>
+              <ul className="space-y-2 rounded-2xl border bg-card p-4 text-sm">
+                {noticed.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">Worked out from your own answers only, and it changes as you answer more.</p>
             </div>
           )}
 

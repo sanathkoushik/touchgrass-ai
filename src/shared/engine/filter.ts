@@ -1,4 +1,5 @@
 import type { Activity, Context, FilterResult, Rejection, UserProfile, Weather } from './types'
+import { effectiveMood } from './modes'
 
 /** Late-night window in which anything requiring travel is excluded, for safety. */
 const LATE_NIGHT_START = 23
@@ -79,8 +80,12 @@ export function rejectionReasons(activity: Activity, profile: UserProfile, ctx: 
   }
 
   // Energy.
-  if (ctx.mood === 'low' && activity.intensity === 3) {
+  if (effectiveMood(ctx) === 'low' && activity.intensity === 3) {
     reasons.push('too intense for a low-energy moment')
+  }
+  // A "minimum" day is about making starting easy, so nothing that needs a long trip.
+  if (ctx.mode === 'minimum' && activity.travel === 'far') {
+    reasons.push('too much effort for a small start')
   }
 
   // Light.

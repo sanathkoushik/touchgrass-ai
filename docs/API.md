@@ -104,3 +104,9 @@ All optional. A location is only ever sent with the person's consent, is rounded
 - `POST /api/context` body `{ location: {lat, lon} }` -> `{ available, conditions?: { weather: {category, temp_c}, daylight: 'day'|'night', sunrise?, sunset? } }`. `available:false` when the weather service cannot be reached (still HTTP 200).
 - `POST /api/places` body `{ q }` (2-60 chars) -> `{ available, places: [{name, region?, country?, lat, lon}] }` (city search, Open-Meteo geocoding).
 - `POST /api/recommend` accepts `location`; the response gains `context` (the conditions it was made with). Only category and temperature are stored with the event.
+
+## Stage 10: sizes, goals, preparation, nearby places
+
+- `POST /api/recommend` accepts `mode`: `'auto'` (default), `'minimum'`, `'normal'` or `'excellent'`. `auto` is decided by the server: a small start after the last two ANSWERED recommendations were skipped, or at low energy; a stretch at high energy after two completed-and-enjoyed (4+) ones; otherwise normal. Unanswered recommendations never count. The response carries `mode` and `preparation: string[]` (equipment and optional extras from the activity's own data).
+- Profile gains optional `goals` (`move_more | be_outdoors | feel_calmer | meet_people | try_new_things | be_creative`). A PATCH that omits `goals` (or `best_windows`) leaves them unchanged.
+- `POST /api/nearby` body `{ location: {lat, lon}, activity_id }` -> `{ available, kind?: {id, label}, places: [{name, distance_m, osm}] }`. At most 3 places, nearest first. `available:false` when OpenStreetMap could not be reached; activities with no place (home, any street) return an empty list.

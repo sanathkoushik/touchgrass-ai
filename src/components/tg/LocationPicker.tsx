@@ -159,8 +159,8 @@ export function LocationPicker({ place, onChange, disabled }: Props) {
             </ul>
           )}
           <p className="text-xs text-muted-foreground">
-            Used only to look up the weather and daylight. Rounded to about 1 km, sent to Open-Meteo, never saved on our servers, and
-            remembered only in this browser. You can remove it any time.
+            Used only to look up the weather, daylight and a few places nearby. Rounded to about 1 km, sent to Open-Meteo (weather) and
+            OpenStreetMap (places), never saved on our servers, and remembered only in this browser. You can remove it any time.
           </p>
         </div>
       )}

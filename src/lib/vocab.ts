@@ -1,4 +1,4 @@
-import type { Avoidance, Equipment, Mood, Motivator, SkipReason, SocialPreference, WeatherCategory } from '@/shared/engine/types'
+import type { ActivityMode, Avoidance, Equipment, Goal, Mood, Motivator, SkipReason, SocialPreference, WeatherCategory } from '@/shared/engine/types'
 
 /**
  * Human wording for every choice the person can make. These are `Record<Union, ...>` on purpose:
@@ -105,4 +105,27 @@ export const WEATHER_LABELS: Record<WeatherCategory, string> = {
   rain: 'Rainy',
   storm: 'Stormy',
   snow: 'Snowy',
+}
+
+export const GOAL_LABELS: Record<Goal, string> = {
+  move_more: 'Move more',
+  be_outdoors: 'Be outdoors more',
+  feel_calmer: 'Feel calmer',
+  meet_people: 'Meet people',
+  try_new_things: 'Try new things',
+  be_creative: 'Be creative',
+}
+
+/** The size of the day, in guilt-free words. 'auto' = let the app adapt to how things have been going. */
+export const MODE_CHOICES: readonly { value: 'auto' | ActivityMode; label: string; hint: string }[] = [
+  { value: 'auto', label: 'Adapt to me', hint: 'Based on how things are going' },
+  { value: 'minimum', label: 'Tiny start', hint: 'The smallest real version' },
+  { value: 'normal', label: 'Normal', hint: 'The usual' },
+  { value: 'excellent', label: 'Stretch', hint: 'Go a bit bigger' },
+]
+
+export const MODE_PILL: Record<ActivityMode, string | null> = {
+  minimum: 'Small start',
+  normal: null,
+  excellent: 'Stretch',
 }

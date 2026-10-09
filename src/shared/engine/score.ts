@@ -1,7 +1,10 @@
 import { getActivity } from './activities'
 import { matchingTerm, termsMatch } from './filter'
+import { effectiveMood } from './modes'
 import type {
   Activity,
+  Goal,
+  SkipReason,
   Context,
   HistoryEvent,
   ScoreComponent,
@@ -31,6 +34,8 @@ const DECLARED_STRENGTH = 3
 const TIME_PRIOR_STRENGTH = 2
 /** Tag-peers (other activities sharing a tag) count for half as much as the activity itself. */
 const PEER_WEIGHT = 0.5
+/** Each stated goal an activity supports nudges its starting belief. Real behaviour still overrides it. */
+const GOAL_LIFT = 0.15
 /** Only the newest events matter for repetition and friction. */
 const RECENT_WINDOW = 8
 
@@ -94,6 +99,20 @@ function relatedEvents(activity: Activity, history: HistoryEvent[]) {
   return { own, peers }
 }
 
+/** Which stated goals an activity genuinely supports (from its own catalog data, nothing guessed). */
+const GOAL_MATCH: Record<Goal, (a: Activity) => boolean> = {
+  move_more: (a) => a.family === 'movement',
+  be_outdoors: (a) => a.weather !== 'any' || a.motivators.includes('nature'),
+  feel_calmer: (a) => a.motivators.includes('calm'),
+  meet_people: (a) => a.social.includes('with_friend') || a.social.includes('small_group'),
+  try_new_things: (a) => a.novelty >= 2,
+  be_creative: (a) => a.motivators.includes('creativity'),
+}
+
+function matchingGoals(activity: Activity, profile: UserProfile): Goal[] {
+  return (profile.goals ?? []).filter((g) => GOAL_MATCH[g](activity))
+}
+
 function statsOf(events: HistoryEvent[]): Stats {
   let n = 0
   let done = 0
@@ -116,17 +135,18 @@ function preferenceComponent(
   profile: UserProfile,
   own: Stats,
   peers: Stats,
-): { value: number; like: string | null } {
+): { value: number; like: string | null; goal: Goal | null } {
   const like = matchingTerm(activity, profile.preferences.likes)
   const motivatorOverlap = activity.motivators.filter((m) => profile.motivators.includes(m)).length
-  const declared = clamp((like ? 0.7 : 0) + 0.15 * motivatorOverlap, 0, 1)
+  const goals = matchingGoals(activity, profile)
+  const declared = clamp((like ? 0.7 : 0) + 0.15 * motivatorOverlap + GOAL_LIFT * goals.length, 0, 1)
 
   const nEff = own.n + PEER_WEIGHT * peers.n
   const doneEff = own.done + PEER_WEIGHT * peers.done
   const priorRate = PRIOR_RATE + DECLARED_LIFT * declared
   const rate = (doneEff + priorRate * DECLARED_STRENGTH) / (nEff + DECLARED_STRENGTH)
 
-  return { value: rate * 2 - 1, like }
+  return { value: rate * 2 - 1, like, goal: goals[0] ?? null }
 }
 
 function enjoymentComponent(own: HistoryEvent[], peers: HistoryEvent[]): number {
@@ -147,6 +167,13 @@ function enjoymentComponent(own: HistoryEvent[], peers: HistoryEvent[]): number 
   const avg = sum / n // 1..5
   const confidence = n / (n + 2)
   return ((avg - 3) / 2) * confidence
+}
+
+function enjoymentEvidence(own: HistoryEvent[]): { observed_enjoyment_avg: number | null; observed_enjoyment_n: number } {
+  const rated = own.filter((e) => (e.outcome === 'completed' || e.outcome === 'partial') && typeof e.enjoyment === 'number')
+  if (rated.length === 0) return { observed_enjoyment_avg: null, observed_enjoyment_n: 0 }
+  const avg = rated.reduce((s, e) => s + clamp(e.enjoyment as number, 1, 5), 0) / rated.length
+  return { observed_enjoyment_avg: Math.round(avg * 10) / 10, observed_enjoyment_n: rated.length }
 }
 
 function noveltyComponent(
@@ -251,9 +278,32 @@ function frictionComponent(activity: Activity, recent: HistoryEvent[]): number {
 }
 
 function moodComponent(activity: Activity, ctx: Context): number {
-  if (ctx.mood === 'low') return activity.intensity === 1 ? 0.4 : 0
-  if (ctx.mood === 'high') return activity.intensity === 1 ? -0.1 : activity.intensity === 2 ? 0.2 : 0.3
+  const mood = effectiveMood(ctx)
+  // A small start is easiest when it is also short.
+  const shortBonus = ctx.mode === 'minimum' && activity.duration.min <= 15 ? 0.2 : 0
+  if (mood === 'low') return (activity.intensity === 1 ? 0.4 : 0) + shortBonus
+  if (mood === 'high') return activity.intensity === 1 ? -0.1 : activity.intensity === 2 ? 0.2 : 0.3
   return 0
+}
+
+/**
+ * If one of the last few skips had a reason THIS activity specifically avoids (too far -> needs no travel),
+ * returns that reason, so the explanation can say so truthfully.
+ */
+function addressedSkip(activity: Activity, recent: HistoryEvent[]): SkipReason | null {
+  for (const e of recent.slice(0, 3)) {
+    if (e.outcome !== 'skipped' || !e.skip_reason) continue
+    const fixes: Partial<Record<SkipReason, boolean>> = {
+      too_far: activity.travel === 'none',
+      too_tired: activity.intensity === 1,
+      no_time: activity.duration.default <= 30,
+      bad_weather: activity.weather === 'any',
+      too_costly: activity.cost === 'free',
+      no_friend: !activity.needsOthers,
+    }
+    return fixes[e.skip_reason] ? e.skip_reason : null // only the MOST RECENT reason is considered
+  }
+  return null
 }
 
 /** Scores every candidate. Pure and deterministic: ties are broken by activity id. */
@@ -296,6 +346,9 @@ export function scoreActivities(
         observed_n: own.length,
         observed_done: own.filter((e) => e.outcome === 'completed').length,
         declared_like: pref.like,
+        declared_goal: pref.goal,
+        ...enjoymentEvidence(own),
+        addresses_skip: addressedSkip(activity, recent),
         recently_suggested: nov.recentlySuggested,
         history_size: ordered.length,
       },

@@ -8,6 +8,8 @@ type Props = {
   title: string
   reason?: string
   firstStep?: string
+  /** What to have ready (may be empty). */
+  preparation?: string[]
   /** Pills row: duration, social mode, weather... */
   meta?: ReactNode
   /** Primary action and fallback controls */
@@ -23,7 +25,7 @@ type Props = {
  * The dominant element on Home. Content is plain HTML/CSS; the spotlight is decorative
  * (aria-hidden, pointer-events-none) so the mission stays readable if the effect fails.
  */
-export function MissionCard({ title, reason, firstStep, meta, actions, transitionKey, busy, className }: Props) {
+export function MissionCard({ title, reason, firstStep, preparation, meta, actions, transitionKey, busy, className }: Props) {
   const reduceMotion = useReducedMotion()
   return (
     <article
@@ -60,6 +62,16 @@ export function MissionCard({ title, reason, firstStep, meta, actions, transitio
           <div className="mt-5 rounded-xl border bg-background/50 p-4 backdrop-blur-sm">
             <p className="text-xs font-medium tracking-wide text-primary uppercase">First step</p>
             <p className="mt-1">{firstStep}</p>
+          </div>
+        )}
+        {preparation && preparation.length > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Have ready</p>
+            <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              {preparation.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
           </div>
         )}
       </motion.div>

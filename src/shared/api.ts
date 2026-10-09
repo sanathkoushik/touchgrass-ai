@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { locationSchema, type ConditionsSummary } from './context'
 import {
+  ACTIVITY_MODES,
+  GOALS,
   AVOIDANCES,
   EQUIPMENT,
   MOODS,
@@ -42,12 +44,18 @@ export const preferencesSchema = z.strictObject({
   social_preference: z.enum(SOCIAL_PREFERENCES),
 })
 
+// Plain lists first: a PATCH must be able to leave them out WITHOUT the default turning "absent" into "empty".
+const goalList = uniq(z.enum(GOALS))
+const windowList = z.array(timeWindow).max(4)
+
 export const profileInputSchema = z.strictObject({
   preferences: preferencesSchema,
   motivators: uniq(z.enum(MOTIVATORS)),
   avoidances: uniq(z.enum(AVOIDANCES)),
   equipment: uniq(z.enum(EQUIPMENT)),
-  best_windows: z.array(timeWindow).max(4).default([]),
+  /** Optional: what the person wants out of this. Older profiles simply have none. */
+  goals: goalList.default([]),
+  best_windows: windowList.default([]),
 })
 export type ProfileInput = z.infer<typeof profileInputSchema>
 
@@ -56,7 +64,8 @@ export const profilePatchSchema = z.strictObject({
   motivators: profileInputSchema.shape.motivators.optional(),
   avoidances: profileInputSchema.shape.avoidances.optional(),
   equipment: profileInputSchema.shape.equipment.optional(),
-  best_windows: profileInputSchema.shape.best_windows.optional(),
+  goals: goalList.optional(),
+  best_windows: windowList.optional(),
 })
 export type ProfilePatch = z.infer<typeof profilePatchSchema>
 
@@ -89,6 +98,11 @@ export const recommendInputSchema = z.strictObject({
   utc_offset_minutes: z.int().min(-840).max(840).optional(),
   /** Set false to skip the AI and get the instant deterministic pick (also saves the free daily AI quota). */
   use_ai: z.boolean().default(true),
+  /**
+   * How big today's activity should be. 'auto' (default) lets the engine decide from energy and recent history
+   * (e.g. a small one after two skips); otherwise the person's choice is used as is.
+   */
+  mode: z.enum(['auto', ...ACTIVITY_MODES]).default('auto'),
   /**
    * Optional, and only ever sent with the person's consent. Used to look up live weather and daylight, rounded to
    * ~1 km, and NEVER stored. Without it the recommendation is made without weather.

@@ -3,20 +3,22 @@ import { useReducedMotion } from 'motion/react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Clock, Footprints, Sparkles, User, Users } from 'lucide-react'
 import type { RecommendResponse } from '@/shared/api'
-import type { Mood, SkipReason, SocialMode } from '@/shared/engine/types'
+import type { ActivityMode, Mood, SkipReason, SocialMode } from '@/shared/engine/types'
 import { ChoiceGroup } from '@/components/tg/ChoiceGroup'
 import { ContextPill } from '@/components/tg/ContextPill'
 import { LocationPicker } from '@/components/tg/LocationPicker'
 import { MissionCard } from '@/components/tg/MissionCard'
+import { NearbyPlaces } from '@/components/tg/NearbyPlaces'
 import { PreferenceChip } from '@/components/tg/PreferenceChip'
 import { PrimaryAction } from '@/components/tg/PrimaryAction'
 import { Button } from '@/components/ui/button'
 import { useMission, type PlanContext } from '@/hooks/useMission'
 import { useProfile } from '@/hooks/useProfile'
 import { loadPlace, type SavedPlace } from '@/lib/location'
-import { DURATION_OPTIONS_FOR_PLAN, MOOD_LABELS, SKIP_REASON_LABELS, WEATHER_LABELS } from '@/lib/vocab'
+import { DURATION_OPTIONS_FOR_PLAN, MODE_CHOICES, MODE_PILL, MOOD_LABELS, SKIP_REASON_LABELS, WEATHER_LABELS } from '@/lib/vocab'
 
 const MODE_LABEL: Record<SocialMode, string> = { solo: 'On your own', with_friend: 'With a friend', small_group: 'Small group' }
+const MODE_OPTIONS = MODE_CHOICES.map((m) => ({ value: m.value, label: m.label, hint: m.hint }))
 const MOOD_OPTIONS = (Object.keys(MOOD_LABELS) as Mood[]).map((m) => ({ value: m, label: MOOD_LABELS[m].label, hint: MOOD_LABELS[m].hint }))
 const MINUTE_OPTIONS = DURATION_OPTIONS_FOR_PLAN.map((m) => ({ value: m, label: m >= 60 ? `${m / 60 === Math.floor(m / 60) ? m / 60 : (m / 60).toFixed(1)} h` : `${m} min` }))
 
@@ -42,6 +44,7 @@ function Meta({ rec, upgrading }: { rec: RecommendResponse; upgrading: boolean }
     <>
       <ContextPill icon={Clock}>{rec.duration_min} min</ContextPill>
       <ContextPill icon={rec.social_mode === 'solo' ? User : Users}>{MODE_LABEL[rec.social_mode]}</ContextPill>
+      {MODE_PILL[rec.mode] && <ContextPill icon={Footprints}>{MODE_PILL[rec.mode]}</ContextPill>}
       {rec.context && (
         <ContextPill>
           {WEATHER_LABELS[rec.context.weather.category]}, {rec.context.weather.temp_c}°C · {rec.context.daylight === 'day' ? 'daylight' : 'after dark'}
@@ -66,6 +69,7 @@ export default function Plan() {
   const [minutes, setMinutes] = useState<number>(60)
   const [mood, setMood] = useState<Mood>('ok')
   const [friend, setFriend] = useState(false)
+  const [mode, setMode] = useState<'auto' | ActivityMode>('auto')
   const [swapOpen, setSwapOpen] = useState(false)
   const [place, setPlace] = useState<SavedPlace | null>(() => loadPlace())
   const touchedMinutes = useRef(false)
@@ -91,6 +95,7 @@ export default function Plan() {
     duration_limit: minutes,
     mood,
     social_available: friend,
+    mode,
     ...(place ? { location: { lat: place.lat, lon: place.lon } } : {}),
   }
   const busy = phase.kind === 'loading'
@@ -132,6 +137,10 @@ export default function Plan() {
             <p className="mb-2 text-sm font-medium">How is your energy?</p>
             <ChoiceGroup label="Energy" options={MOOD_OPTIONS} value={mood} onChange={setMood} disabled={busy} />
           </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">How big should it be?</p>
+            <ChoiceGroup label="Size of the activity" options={MODE_OPTIONS} value={mode} onChange={setMode} disabled={busy} />
+          </div>
           <LocationPicker place={place} onChange={setPlace} disabled={busy} />
           <PreferenceChip selected={friend} onToggle={() => setFriend((f) => !f)} disabled={busy}>
             Someone is free to join me
@@ -156,6 +165,7 @@ export default function Plan() {
             title={phase.rec.title}
             reason={phase.rec.reason}
             firstStep={phase.rec.first_step}
+            preparation={phase.rec.preparation}
             transitionKey={`${phase.rec.activity_id}|${phase.rec.source}`}
             busy={phase.upgrading}
             meta={<Meta rec={phase.rec} upgrading={phase.upgrading} />}
@@ -197,6 +207,7 @@ export default function Plan() {
               </div>
             </div>
           )}
+          <NearbyPlaces activityId={phase.rec.activity_id} location={place ? { lat: place.lat, lon: place.lon } : null} />
           {phase.rec.fallback && (
             <p className="flex items-start gap-2 px-1 text-sm text-muted-foreground">
               <Footprints className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />

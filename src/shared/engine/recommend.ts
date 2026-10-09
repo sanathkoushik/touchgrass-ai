@@ -2,6 +2,10 @@ import { ACTIVITIES, GUARANTEED_FALLBACK_ID, getActivity } from './activities'
 import { filterActivities } from './filter'
 import { scoreActivities } from './score'
 import type {
+  ActivityMode,
+  Bundle,
+  Equipment,
+  Goal,
   WeatherCategory,
   Activity,
   Context,
@@ -9,6 +13,7 @@ import type {
   Recommendation,
   Rejection,
   ScoredActivity,
+  SkipReason,
   SocialMode,
   UserProfile,
 } from './types'
@@ -42,7 +47,34 @@ export function rank(
 /** Minutes to suggest: the activity's default, never above what the user has or the activity's max. */
 export function planDuration(activity: Activity, ctx: Context): number {
   const upper = Math.min(activity.duration.max, ctx.duration_limit)
+  // minimum = the smallest real version; excellent = as long as the time allows (up to the activity's max).
+  if (ctx.mode === 'minimum') return activity.duration.min
+  if (ctx.mode === 'excellent') return Math.max(activity.duration.min, upper)
   return Math.max(activity.duration.min, Math.min(activity.duration.default, upper))
+}
+
+const EQUIPMENT_PREP: Record<Equipment, string> = {
+  bicycle: 'Your bicycle',
+  racket: 'Your racket',
+  ball: 'A ball',
+  swimwear: 'Swimwear',
+  yoga_mat: 'Your yoga mat',
+  sketchbook: 'Your sketchbook',
+  cards: 'Cards or a board game',
+  trash_bag: 'A bag for litter',
+}
+
+const BUNDLE_PREP: Record<Bundle, string> = {
+  music: 'Optional: a playlist you like',
+  podcast: 'Optional: a podcast episode',
+  audiobook: 'Optional: an audiobook',
+  call: 'Optional: a friend to call',
+  photo: 'Optional: your phone camera',
+}
+
+/** What to have ready. Comes only from the activity's own equipment and bundle data. */
+export function preparationFor(activity: Activity): string[] {
+  return [...activity.equipment.map((e) => EQUIPMENT_PREP[e]), ...activity.bundles.map((b) => BUNDLE_PREP[b])]
 }
 
 /** Picks how to do it, preferring what the user prefers when it is possible right now. */
@@ -63,16 +95,25 @@ export function evidenceFacts(scored: ScoredActivity, ctx: Context): string[] {
   const { activity, components, evidence } = scored
   const parts: string[] = []
 
+  // 1. The adaptation itself: why THIS size, and what it fixes from last time. These are the learning the person can see.
+  const modeFact = modeSentence(ctx)
+  if (modeFact) parts.push(modeFact)
+  if (evidence.addresses_skip && SKIP_FIX[evidence.addresses_skip]) parts.push(SKIP_FIX[evidence.addresses_skip])
+  if (evidence.observed_enjoyment_avg !== null && evidence.observed_enjoyment_avg >= 4) {
+    parts.push(`You rated this ${evidence.observed_enjoyment_avg} out of 5 before.`)
+  }
+
   if (evidence.observed_n >= 2 && evidence.observed_done / evidence.observed_n >= 0.5) {
     parts.push(`You have finished this ${evidence.observed_done} of ${evidence.observed_n} times.`)
   }
   if (evidence.declared_like) parts.push(`You said you like ${evidence.declared_like}.`)
+  else if (evidence.declared_goal) parts.push(`It fits your goal to ${GOAL_PHRASE[evidence.declared_goal]}.`)
   if (ctx.social_available && components.social_fit >= 0.5) parts.push('Someone is free to join you.')
   // "Fresh compared to your recent picks" is only true if there ARE recent picks.
   if (evidence.history_size > 0 && !evidence.recently_suggested && activity.novelty >= 2 && components.novelty > 0.2) {
     parts.push('It is a fresh change from your recent picks.')
   }
-  if (ctx.mood === 'low' && activity.intensity === 1) parts.push('It is gentle, which suits a low-energy moment.')
+  if (ctx.mood === 'low' && activity.intensity === 1 && ctx.mode !== 'minimum') parts.push('It is gentle, which suits a low-energy moment.')
   if (components.time_fit >= 0.3) parts.push('Activities like this have worked for you around this time of day.')
   // Live conditions are only mentioned when we really have them AND they matter for this activity (it is outdoors).
   // The filter has already confirmed the conditions suit it, so the statement is both true and relevant.
@@ -82,6 +123,42 @@ export function evidenceFacts(scored: ScoredActivity, ctx: Context): string[] {
     parts.push(`It is ${SKY_WORD[ctx.weather.category]} and ${Math.round(ctx.weather.temp_c)} degrees outside.`)
   }
   return parts
+}
+
+const SKIP_FIX: Record<SkipReason, string> = {
+  too_far: 'You said the last one was too far; this needs no travel.',
+  too_tired: 'You said the last one wore you out; this one is gentle.',
+  no_time: 'You said the last one took too long; this one is quick.',
+  bad_weather: 'The last one was spoiled by weather; this works in any weather.',
+  too_costly: 'You said the last one cost too much; this one is free.',
+  no_friend: 'You had no one to join the last one; this works on your own.',
+  boring: '',
+  other: '',
+}
+
+const GOAL_PHRASE: Record<Goal, string> = {
+  move_more: 'move more',
+  be_outdoors: 'spend time outdoors',
+  feel_calmer: 'feel calmer',
+  meet_people: 'meet people',
+  try_new_things: 'try new things',
+  be_creative: 'be creative',
+}
+
+/** Why this size, only when the size is not simply "normal". */
+function modeSentence(ctx: Context): string | null {
+  switch (ctx.mode_cause) {
+    case 'recovery':
+      return 'Your last two did not happen, so this one is small on purpose.'
+    case 'low_energy':
+      return 'Kept short and easy for a low-energy moment.'
+    case 'momentum':
+      return 'Your last two went well, so this one stretches a little.'
+    case 'chosen':
+      return ctx.mode === 'minimum' ? 'You asked for a small start.' : ctx.mode === 'excellent' ? 'You asked for a bigger one.' : null
+    default:
+      return null
+  }
 }
 
 const SKY_WORD: Record<WeatherCategory, string> = {
@@ -159,6 +236,8 @@ export function buildRecommendation(
     activity_id: primary.activity.id,
     title: primary.activity.title,
     duration_min: planDuration(primary.activity, ctx),
+    mode: (ctx.mode ?? 'normal') satisfies ActivityMode,
+    preparation: preparationFor(primary.activity),
     reason: overrides.reason ?? explain(primary, ctx),
     first_step: overrides.firstStep ?? primary.activity.firstStep,
     social_mode: planSocialMode(primary.activity, profile, ctx),
