@@ -1,0 +1,337 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "One recommendation: instant pick, then AI upgrade",
+    "output": ".archify/sequence-recommendation-20261009-214044/touchgrass-recommendation-sequence.html",
+    "viewBox": [
+      1080,
+      696
+    ],
+    "column_fit": "spread",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/sanathkoushik/touchgrass-ai.git",
+      "provider": "github",
+      "revision": "891d22a9907035561baafcf99c442e199bf0a9db"
+    }
+  },
+  "participants": [
+    {
+      "id": "person",
+      "type": "external",
+      "label": "You",
+      "sublabel": "phone or laptop"
+    },
+    {
+      "id": "app",
+      "type": "frontend",
+      "label": "React app",
+      "sublabel": "mission flow",
+      "sources": [
+        {
+          "path": "src/hooks/useMission.ts",
+          "line": 36,
+          "label": "useMission"
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Hono API",
+      "sublabel": "Worker",
+      "sources": [
+        {
+          "path": "src/worker/app.ts",
+          "line": 223,
+          "label": "/api/recommend"
+        },
+        {
+          "path": "src/worker/app.ts",
+          "line": 293,
+          "label": "/upgrade"
+        },
+        {
+          "path": "src/worker/app.ts",
+          "line": 369,
+          "label": "/api/feedback"
+        }
+      ]
+    },
+    {
+      "id": "engine",
+      "type": "backend",
+      "label": "Engine",
+      "sublabel": "plain code",
+      "sources": [
+        {
+          "path": "src/shared/engine/recommend.ts",
+          "line": 108,
+          "label": "planDeterministic"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "D1",
+      "sublabel": "profiles + events",
+      "sources": [
+        {
+          "path": "src/worker/d1-repository.ts",
+          "line": 41,
+          "label": "D1Repository"
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "type": "backend",
+      "label": "AI layer",
+      "sublabel": "validate + fall back",
+      "sources": [
+        {
+          "path": "src/worker/ai/refine.ts",
+          "line": 42,
+          "label": "refineWithAi"
+        },
+        {
+          "path": "src/worker/ai/prompt.ts",
+          "line": 140,
+          "label": "validateChoice"
+        }
+      ]
+    },
+    {
+      "id": "gemma",
+      "type": "cloud",
+      "label": "Gemma 4",
+      "sublabel": "Workers AI",
+      "sources": [
+        {
+          "path": "src/worker/ai/workers-ai.ts",
+          "line": 103,
+          "label": "rejectIfBusy"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 354,
+      "label": "1. Instant pick"
+    },
+    {
+      "from": 366,
+      "to": 597,
+      "label": "2. AI upgrade (background)"
+    }
+  ],
+  "messages": [
+    {
+      "id": "tap-find",
+      "from": "person",
+      "to": "app",
+      "y": 166,
+      "label": "tap Find my mission"
+    },
+    {
+      "id": "ask-engine-pick",
+      "from": "app",
+      "to": "api",
+      "y": 195,
+      "label": "recommend, AI skipped",
+      "variant": "emphasis"
+    },
+    {
+      "id": "load-memory",
+      "from": "api",
+      "to": "db",
+      "y": 224,
+      "label": "load profile + history"
+    },
+    {
+      "id": "plan-pick",
+      "from": "api",
+      "to": "engine",
+      "y": 253,
+      "label": "filter, score, plan"
+    },
+    {
+      "id": "save-pending",
+      "from": "api",
+      "to": "db",
+      "y": 282,
+      "label": "save as pending"
+    },
+    {
+      "id": "return-pick",
+      "from": "api",
+      "to": "app",
+      "y": 311,
+      "label": "engine pick",
+      "variant": "return",
+      "note": "about 0.8 s measured"
+    },
+    {
+      "id": "show-card",
+      "from": "app",
+      "to": "person",
+      "y": 340,
+      "label": "card + Personalizing...",
+      "variant": "return"
+    },
+    {
+      "id": "ask-upgrade",
+      "from": "app",
+      "to": "api",
+      "y": 380,
+      "label": "upgrade this one",
+      "variant": "emphasis"
+    },
+    {
+      "id": "refine",
+      "from": "api",
+      "to": "ai",
+      "y": 409,
+      "label": "refine, 6 s budget",
+      "variant": "dashed",
+      "note": "only if an AI is configured, not cooling down, and not tried before"
+    },
+    {
+      "id": "ask-gemma",
+      "from": "ai",
+      "to": "gemma",
+      "y": 438,
+      "label": "choose + word it",
+      "variant": "dashed"
+    },
+    {
+      "id": "gemma-reply",
+      "from": "gemma",
+      "to": "ai",
+      "y": 467,
+      "label": "JSON reply",
+      "variant": "return"
+    },
+    {
+      "id": "validated",
+      "from": "ai",
+      "to": "api",
+      "y": 496,
+      "label": "valid, or engine pick",
+      "variant": "return",
+      "note": "invalid, slow or busy means the engine pick stays"
+    },
+    {
+      "id": "save-upgrade",
+      "from": "api",
+      "to": "db",
+      "y": 525,
+      "label": "save upgraded choice"
+    },
+    {
+      "id": "return-upgrade",
+      "from": "api",
+      "to": "app",
+      "y": 554,
+      "label": "upgraded or not",
+      "variant": "return",
+      "note": "about 2.8 s measured"
+    },
+    {
+      "id": "fade-in",
+      "from": "app",
+      "to": "person",
+      "y": 583,
+      "label": "new wording fades in",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "app",
+      "from": 160,
+      "to": 590,
+      "type": "frontend"
+    },
+    {
+      "participant": "api",
+      "from": 191,
+      "to": 315,
+      "type": "backend"
+    },
+    {
+      "participant": "api",
+      "from": 376,
+      "to": 558,
+      "type": "backend"
+    },
+    {
+      "participant": "db",
+      "from": 220,
+      "to": 232,
+      "type": "database"
+    },
+    {
+      "participant": "db",
+      "from": 278,
+      "to": 286,
+      "type": "database"
+    },
+    {
+      "participant": "db",
+      "from": 521,
+      "to": 529,
+      "type": "database"
+    },
+    {
+      "participant": "engine",
+      "from": 249,
+      "to": 257,
+      "type": "backend"
+    },
+    {
+      "participant": "ai",
+      "from": 405,
+      "to": 500,
+      "type": "backend"
+    },
+    {
+      "participant": "gemma",
+      "from": 434,
+      "to": 471,
+      "type": "cloud"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Why two steps",
+      "items": [
+        "The engine answers in about 0.8 s; the AI usually needs 2 to 3 s more",
+        "So the screen never waits on the AI",
+        "Each recommendation gets one upgrade attempt, which protects the free quota"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "What the AI cannot do",
+      "items": [
+        "Pick anything outside the top 3 candidates the engine chose",
+        "Change the title, the duration or who you go with",
+        "Invent history, numbers, links or feelings: such replies are rejected"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "If you already tapped Let's go",
+      "items": [
+        "A late AI upgrade is dropped",
+        "The card never changes under someone who has decided"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "TouchGrass AI: how the pieces fit together",
+    "output": ".archify/architecture-touchgrass-20261009-213738/touchgrass-architecture.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/sanathkoushik/touchgrass-ai.git",
+      "provider": "github",
+      "revision": "891d22a9907035561baafcf99c442e199bf0a9db"
+    }
+  },
+  "components": [
+    {
+      "id": "person",
+      "type": "external",
+      "label": "You",
+      "sublabel": "phone or laptop",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        120,
+        60
+      ]
+    },
+    {
+      "id": "app",
+      "type": "frontend",
+      "label": "React app",
+      "sublabel": "screens + mission flow",
+      "pos": [
+        230,
+        300
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/main.tsx",
+          "line": 6,
+          "label": "React entry"
+        },
+        {
+          "path": "src/hooks/useMission.ts",
+          "line": 36,
+          "label": "mission flow"
+        },
+        {
+          "path": "src/lib/api.ts",
+          "line": 47,
+          "label": "API client"
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "Hono API",
+      "sublabel": "a Cloudflare Worker",
+      "pos": [
+        480,
+        300
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/worker/app.ts",
+          "line": 139,
+          "label": "createApp"
+        },
+        {
+          "path": "src/worker/app.ts",
+          "line": 223,
+          "label": "/api/recommend"
+        },
+        {
+          "path": "src/worker/app.ts",
+          "line": 293,
+          "label": "/upgrade"
+        }
+      ]
+    },
+    {
+      "id": "engine",
+      "type": "backend",
+      "label": "Recommendation engine",
+      "sublabel": "30 activities, plain code",
+      "pos": [
+        740,
+        300
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/shared/engine/recommend.ts",
+          "line": 108,
+          "label": "planDeterministic"
+        },
+        {
+          "path": "src/shared/engine/filter.ts",
+          "line": 119,
+          "label": "hard filter"
+        },
+        {
+          "path": "src/shared/engine/score.ts",
+          "line": 260,
+          "label": "scoring"
+        }
+      ]
+    },
+    {
+      "id": "ai",
+      "type": "backend",
+      "label": "AI layer",
+      "sublabel": "ask, validate, fall back",
+      "pos": [
+        480,
+        140
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/worker/ai/refine.ts",
+          "line": 42,
+          "label": "refineWithAi"
+        },
+        {
+          "path": "src/worker/ai/prompt.ts",
+          "line": 140,
+          "label": "validateChoice"
+        },
+        {
+          "path": "src/worker/ai/gate.ts",
+          "line": 12,
+          "label": "circuit breaker"
+        }
+      ]
+    },
+    {
+      "id": "gemma",
+      "type": "cloud",
+      "label": "Gemma 4",
+      "sublabel": "Workers AI, free tier",
+      "pos": [
+        740,
+        140
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/worker/ai/workers-ai.ts",
+          "line": 4,
+          "label": "model id"
+        },
+        {
+          "path": "src/worker/ai/workers-ai.ts",
+          "line": 103,
+          "label": "rejectIfBusy"
+        },
+        {
+          "path": "vite.config.ts",
+          "line": 14,
+          "label": "AI binding"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "D1 database",
+      "sublabel": "profiles + events",
+      "pos": [
+        480,
+        460
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/worker/d1-repository.ts",
+          "line": 41,
+          "label": "D1Repository"
+        },
+        {
+          "path": "migrations/0001_init.sql",
+          "line": 4,
+          "label": "profiles"
+        },
+        {
+          "path": "migrations/0001_init.sql",
+          "line": 11,
+          "label": "events"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Your device",
+      "wraps": [
+        "person",
+        "app"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Cloudflare (one project, no sleeping server)",
+      "wraps": [
+        "api",
+        "engine",
+        "ai",
+        "gemma",
+        "db"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "person-uses-app",
+      "from": "person",
+      "to": "app",
+      "label": "uses"
+    },
+    {
+      "id": "app-calls-api",
+      "from": "app",
+      "to": "api",
+      "label": "HTTPS JSON",
+      "variant": "emphasis"
+    },
+    {
+      "id": "api-plans",
+      "from": "api",
+      "to": "engine",
+      "label": "rank + plan"
+    },
+    {
+      "id": "api-stores",
+      "from": "api",
+      "to": "db",
+      "label": "profile + events",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "api-upgrades",
+      "from": "api",
+      "to": "ai",
+      "label": "upgrade, opt-in",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "ai-asks-gemma",
+      "from": "ai",
+      "to": "gemma",
+      "label": "ask Gemma",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Instant first, smarter second",
+      "items": [
+        "The screen asks for the engine's pick first, with the AI skipped, and shows it at once",
+        "A second background call lets Gemma improve that same recommendation",
+        "Measured in a browser: engine pick at about 0.8 s, AI wording at about 2.8 s"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "It never breaks",
+      "items": [
+        "AI slow (6 s cap), busy, out of free quota or invalid: the engine's pick stays",
+        "A circuit breaker skips the AI for a while after a failure",
+        "If saving fails, the recommendation is still returned"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "One project, no cold start",
+      "items": [
+        "One Cloudflare project serves the React app and the API",
+        "Static files are served first; /api/* always runs the Worker",
+        "Local dev needs no login; the AI is switched on only for dev:ai and deploy"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Your data",
+      "items": [
+        "No accounts: a random id per browser, stored on the server only as a SHA-256 hash",
+        "The AI gets a few anonymous facts (your chosen interests, time and energy), never ids",
+        "Delete my data removes your profile and history"
+      ]
+    }
+  ]
+}

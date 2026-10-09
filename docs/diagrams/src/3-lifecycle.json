@@ -1,0 +1,227 @@
+{
+  "schema_version": 2,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "What happens to a recommendation",
+    "output": ".archify/lifecycle-recommendation-20261009-214236/touchgrass-recommendation-lifecycle.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/sanathkoushik/touchgrass-ai.git",
+      "provider": "github",
+      "revision": "891d22a9907035561baafcf99c442e199bf0a9db"
+    }
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "On your screen"
+    },
+    {
+      "id": "ai",
+      "label": "The AI step"
+    },
+    {
+      "id": "terminal",
+      "label": "Your answer, saved for good"
+    }
+  ],
+  "states": [
+    {
+      "id": "shown",
+      "type": "start",
+      "label": "Shown",
+      "sublabel": "engine pick, saved as pending",
+      "lane": "main",
+      "col": 0,
+      "step": "01",
+      "tag": "pending",
+      "sources": [
+        {
+          "path": "migrations/0001_init.sql",
+          "line": 11,
+          "label": "events table"
+        }
+      ]
+    },
+    {
+      "id": "tried",
+      "type": "decision",
+      "label": "AI upgrade tried",
+      "sublabel": "one attempt only",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "background",
+      "sources": [
+        {
+          "path": "src/worker/app.ts",
+          "line": 293,
+          "label": "upgrade route"
+        }
+      ]
+    },
+    {
+      "id": "waiting",
+      "type": "waiting",
+      "label": "Waiting for you",
+      "sublabel": "you are out there",
+      "lane": "main",
+      "col": 2,
+      "step": "03",
+      "tag": "pending",
+      "sources": [
+        {
+          "path": "src/hooks/useMission.ts",
+          "line": 97,
+          "label": "Let's go"
+        }
+      ]
+    },
+    {
+      "id": "answer",
+      "type": "active",
+      "label": "You answer",
+      "sublabel": "four choices",
+      "lane": "main",
+      "col": 3,
+      "step": "04",
+      "tag": "feedback",
+      "sources": [
+        {
+          "path": "src/worker/app.ts",
+          "line": 369,
+          "label": "feedback route"
+        }
+      ]
+    },
+    {
+      "id": "ai_used",
+      "type": "success",
+      "label": "AI wording kept",
+      "sublabel": "may pick another activity",
+      "lane": "ai",
+      "col": 1,
+      "tag": "upgrade: ai",
+      "sources": [
+        {
+          "path": "src/worker/repository.ts",
+          "line": 26,
+          "label": "context.upgrade"
+        }
+      ]
+    },
+    {
+      "id": "engine_kept",
+      "type": "neutral",
+      "label": "Engine pick kept",
+      "sublabel": "slow, busy or invalid",
+      "lane": "ai",
+      "col": 2,
+      "tag": "upgrade: failed",
+      "sources": [
+        {
+          "path": "src/worker/ai/refine.ts",
+          "line": 42,
+          "label": "falls back"
+        }
+      ]
+    },
+    {
+      "id": "done",
+      "type": "success",
+      "label": "Counts as success",
+      "sublabel": "did it: full, part of it: half",
+      "lane": "terminal",
+      "col": 3,
+      "tag": "terminal",
+      "sources": [
+        {
+          "path": "src/worker/app.ts",
+          "line": 303,
+          "label": "never rewritten"
+        }
+      ]
+    },
+    {
+      "id": "not_done",
+      "type": "neutral",
+      "label": "No success credit",
+      "sublabel": "did not go, or swapped",
+      "lane": "terminal",
+      "col": 4,
+      "tag": "terminal"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "to-tried",
+      "from": "shown",
+      "to": "tried",
+      "label": "background"
+    },
+    {
+      "id": "valid-reply",
+      "from": "tried",
+      "to": "ai_used",
+      "label": "valid reply",
+      "variant": "emphasis"
+    },
+    {
+      "id": "no-help",
+      "from": "tried",
+      "to": "engine_kept",
+      "label": "no help",
+      "variant": "dashed"
+    },
+    {
+      "id": "ai-to-waiting",
+      "from": "ai_used",
+      "to": "waiting"
+    },
+    {
+      "id": "kept-to-waiting",
+      "from": "engine_kept",
+      "to": "waiting"
+    },
+    {
+      "id": "back-home",
+      "from": "waiting",
+      "to": "answer",
+      "label": "I'm back"
+    },
+    {
+      "id": "answer-done",
+      "from": "answer",
+      "to": "done",
+      "label": "did it, part",
+      "variant": "emphasis"
+    },
+    {
+      "id": "answer-not",
+      "from": "answer",
+      "to": "not_done",
+      "label": "skipped, swapped",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One chance, then settled",
+      "items": [
+        "Each recommendation is upgraded at most once",
+        "If you tap Let's go first, a late upgrade is dropped",
+        "Once answered, a recommendation is never rewritten"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Guilt-free by design",
+      "items": [
+        "Did not go is a normal answer with an optional reason",
+        "There are no streaks and no failure marks",
+        "A reason such as too tired or too far shapes the next pick"
+      ]
+    }
+  ]
+}
