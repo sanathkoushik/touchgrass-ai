@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "npm run build && vite preview",
+    "preview": "npm run build && npm run db:migrate:local && wrangler dev -c dist/touchgrass_ai/wrangler.json --persist-to .wrangler/state",
     "test": "vitest run",
     "test:watch": "vitest",
     "cf-typegen": "wrangler types",
@@ -18,7 +18,7 @@
     "predev": "node scripts/migrate-local.mjs",
     "db:reset:local": "wrangler d1 execute DB --local --command \"DELETE FROM events; DELETE FROM profiles;\"",
     "dev:ai": "node scripts/with-env.mjs TG_AI=1 -- vite",
-    "preview:ai": "node scripts/with-env.mjs TG_AI=1 -- npm run build && node scripts/with-env.mjs TG_AI=1 -- vite preview",
+    "preview:ai": "node scripts/with-env.mjs TG_AI=1 -- npm run build && npm run db:migrate:local && wrangler dev -c dist/touchgrass_ai/wrangler.json --persist-to .wrangler/state",
     "test:live": "vitest run --config vitest.live.config.ts"
   },
   "dependencies": {

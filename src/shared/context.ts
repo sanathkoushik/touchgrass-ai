@@ -1,5 +1,9 @@
 import { z } from 'zod'
 import type { WeatherCategory } from './engine/types'
+import { roundCoord, roundLocation, type Location } from './geo'
+
+// Re-exported so server code keeps one import. The browser must import from './geo' (no zod).
+export { roundCoord, roundLocation, type Location }
 
 /**
  * Location and live conditions: shared by the Worker (validation) and the React app (types).
@@ -9,16 +13,11 @@ import type { WeatherCategory } from './engine/types'
  *  - the server never stores them: only the weather CATEGORY and temperature are kept with a recommendation.
  */
 
-/** 2 decimals is about 1.1 km: precise enough for weather, too coarse to find a house. */
-export const roundCoord = (n: number): number => Math.round(n * 100) / 100
-
 export const locationSchema = z.strictObject({
   lat: z.number().min(-90).max(90),
   lon: z.number().min(-180).max(180),
 })
-export type Location = z.infer<typeof locationSchema>
-
-export const roundLocation = (l: Location): Location => ({ lat: roundCoord(l.lat), lon: roundCoord(l.lon) })
+// (Location and roundLocation live in ./geo; the schema above accepts exactly that shape.)
 
 export const contextInputSchema = z.strictObject({ location: locationSchema })
 export const placesInputSchema = z.strictObject({ q: z.string().trim().min(2).max(60) })

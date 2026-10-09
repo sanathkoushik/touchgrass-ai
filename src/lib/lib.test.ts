@@ -160,7 +160,12 @@ describe('API client', () => {
     expect(JSON.parse(init.body as string)).toEqual({ duration_limit: 60, use_ai: false })
   })
 
-  it('treats "no profile yet" as a normal state (null), not an error', async () => {
+  it('treats the 200 "no profile yet" answer as null', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { profile: null })))
+    expect(await getProfile()).toBeNull()
+  })
+
+  it('still understands the older 404 "no profile yet" answer', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(404, { error: { code: 'profile_not_found', message: 'No profile yet.' } })))
     expect(await getProfile()).toBeNull()
   })

@@ -110,3 +110,8 @@ All optional. A location is only ever sent with the person's consent, is rounded
 - `POST /api/recommend` accepts `mode`: `'auto'` (default), `'minimum'`, `'normal'` or `'excellent'`. `auto` is decided by the server: a small start after the last two ANSWERED recommendations were skipped, or at low energy; a stretch at high energy after two completed-and-enjoyed (4+) ones; otherwise normal. Unanswered recommendations never count. The response carries `mode` and `preparation: string[]` (equipment and optional extras from the activity's own data).
 - Profile gains optional `goals` (`move_more | be_outdoors | feel_calmer | meet_people | try_new_things | be_creative`). A PATCH that omits `goals` (or `best_windows`) leaves them unchanged.
 - `POST /api/nearby` body `{ location: {lat, lon}, activity_id }` -> `{ available, kind?: {id, label}, places: [{name, distance_m, osm}] }`. At most 3 places, nearest first. `available:false` when OpenStreetMap could not be reached; activities with no place (home, any street) return an empty list.
+
+## Stage 11 changes
+
+- `GET /api/profile` answers `200 { "profile": null }` when there is no profile yet (a normal first-visit state), instead of a 404. `PATCH /api/profile` and `POST /api/recommend` still answer 404 `profile_not_found`.
+- Any storage failure answers `503 { error: { code: "storage_unavailable" } }` (never a raw 500). `POST /api/recommend` accepts `fallback_profile` (same shape as onboarding): used only when saved data is unreachable, in which case the response has `persisted: false`.

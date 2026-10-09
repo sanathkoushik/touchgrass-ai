@@ -1,4 +1,4 @@
-import { roundLocation, type Location } from '@/shared/context'
+import { roundLocation, type Location } from '@/shared/geo'
 
 const KEY = 'tg_place'
 

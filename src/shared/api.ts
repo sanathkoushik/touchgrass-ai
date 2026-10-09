@@ -88,6 +88,9 @@ export interface ProfileResponse {
   stats: ProfileStats
 }
 
+/** GET /api/profile: "no profile yet" is a normal 200 answer (so a first visit logs no error), not a 404. */
+export type ProfileLookupResponse = ProfileResponse | { profile: null }
+
 // ---------------------------------------------------------------- recommend
 
 export const recommendInputSchema = z.strictObject({
@@ -108,6 +111,11 @@ export const recommendInputSchema = z.strictObject({
    * ~1 km, and NEVER stored. Without it the recommendation is made without weather.
    */
   location: locationSchema.optional(),
+  /**
+   * Last-known profile, kept in the person's own browser. Used ONLY if saved data cannot be read right now, so a
+   * database outage still gives a real recommendation (without history, and without saving it).
+   */
+  fallback_profile: profileInputSchema.optional(),
 })
 export type RecommendInput = z.input<typeof recommendInputSchema>
 

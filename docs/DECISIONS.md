@@ -127,3 +127,35 @@ run fail without a Cloudflare login (and would spend free quota on every dev ses
 - **So reliability comes from caching, not hope:** per-instance memory (6 h), then a shared D1 table `place_cache` (24 h fresh; entries up to 14 days old are served if OpenStreetMap is down), a 60 s cool-down for the whole service on 429/503/network errors, and a 60 s cool-down for only the affected kind on a timeout or 504. No user id is stored in the cache; it holds public place names per ~1 km cell.
 - Privacy: only the rounded location and a kind of place go to Overpass; the consent text names OpenStreetMap.
 - Overpass policy: an app's queries count together across all its users, so very heavy use needs another provider or a self-hosted instance.
+
+## 008 - Performance hardening and failure drills (Stage 11)
+Measured with Lighthouse (mobile profile: simulated slow 4G, 4x slower CPU) on the production build served by `wrangler dev`. Before -> after:
+
+| | Home | Plan |
+|---|---|---|
+| Performance | 87 -> 91 | 92 -> 94 |
+| Accessibility | 100 -> 100 | 96 -> 100 |
+| Best practices | 96 -> 100 | 96 -> 100 |
+| SEO | 91 -> 100 | 91 -> 100 |
+| First paint | 2.7 s -> 1.9 s | 2.6 s -> 2.3 s |
+| Blocking time | 180 -> 110 ms | 70 -> 30 ms |
+| Main script (gzip) | 194 -> 128 kB | |
+
+Slow 3G (400 kbps, 400 ms RTT): Home first paint 6.1 s -> 4.9 s. Pages other than Home still need the script before anything appears (about 8.5 s on 3G); Home's largest paint stays about 3.2 s because React re-creates the headline.
+
+What changed and why:
+- **zod left the browser** (it is server-only). Cause: browser code imported modules that import zod. Fix: `shared/geo.ts` and a split `places-schema.ts`. A guard test walks the browser import graph and fails if zod, hono or Worker code becomes reachable.
+- **Pages load on demand** (only Home and the layout are in the main bundle) and Home pre-loads the next page after 2 s (not on "data saver").
+- **Motion's engine loads lazily** (`LazyMotion`, `m.*`, domMax because the halo button uses layout animation): 25 kB gzip off the first load.
+- **First-paint shell**: the Home headline is in index.html, so it paints before any JavaScript; React then replaces it with identical layout (verified to the pixel).
+- **CSS inlined into index.html** by a tiny build plugin (the CSS and the script were sharing a slow connection and the CSS lost). Safe for an SPA whose HTML loads once per visit.
+- **Strict CSP, generated at build time** with exact SHA-256 hashes for the two inline blocks (no blanket unsafe-inline), plus long-lived caching for hashed files, nosniff, referrer and permissions policy. The browser only talks to its own origin; weather and places go through the Worker. Verified: no violations on any route.
+- **"No profile yet" is a normal 200** (`GET /api/profile` -> `{profile:null}`), so a first visit logs no console error.
+- `npm run preview` was broken (Vite preview cannot run this Worker); it now serves the built output with `wrangler dev`.
+
+Failure drills (all automated, plus real-browser checks):
+- **Database down**: every data route answers a clean 503 `storage_unavailable` with nothing leaked. The browser keeps a copy of the last profile and sends it as `fallback_profile` ONLY then, so a real recommendation still comes back (unsaved, no history).
+- **Server unreachable** (network error, 5xx, HTML instead of JSON): the browser plans on the device with the same engine (loaded on demand), from the profile copy. It says so ("made on your device, will not be remembered") and never claims weather or history it cannot know. If the server answered on purpose (no profile, invalid request) the answer is respected.
+- **AI overloaded or hung**: engine pick within the time budget. Found and fixed a real hang: the deadline was only enforced by providers; `refine` now enforces it too.
+- **Weather down**: planning continues without weather. **All three down at once**: still a real recommendation.
+- Deferred to Phase 12: per-client rate limiting (needs the Cloudflare rate-limit binding) and Sentry.

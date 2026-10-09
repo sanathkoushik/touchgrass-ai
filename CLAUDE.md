@@ -73,3 +73,12 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Zod: never wrap a `.default()` schema in `.optional()` for PATCH schemas; build the PATCH from the plain schema (see `goalList`/`windowList` in api.ts).
 - Places: `OverpassProvider` + `PlaceCache` (src/worker/context). Queries are built from constants only, nodes and ways only (relations time out), always with a User-Agent. Do not hammer the public server when testing: it rate-limits (429) and the real feature depends on caching. Live probes belong in `live/`, run sparingly.
 - Migrations so far: 0001 init, 0002 place_cache. Run `npm run db:migrate:remote` before deploying.
+
+## Performance and resilience (Stage 11)
+- Keep the browser bundle lean: never import zod, hono or anything from src/worker into browser code (a test enforces it). Browser-only helpers go in zod-free files (`shared/geo.ts`, `shared/places.ts`); schemas go in their own files.
+- New pages are `React.lazy` routes. Motion elements are `m.*` (never `motion.*`), inside `LazyMotion`.
+- Do not add an inline script or style to index.html without checking the generated CSP (`scripts/static-headers-plugin.ts` hashes them). Static headers live in that plugin, not in public/_headers.
+- The Home shell in index.html must keep the same classes and sizes as the React Home hero, or the first paint will jump.
+- Measure before and after any performance change (Lighthouse on `npm run preview`). Default mobile profile plus a slow-3G run (`--throttling.rttMs=400 --throttling.throughputKbps=400 --throttling.cpuSlowdownMultiplier=4`).
+- Every failure must degrade to a real recommendation: storage -> 503 + `fallback_profile`; server unreachable -> on-device plan (`lib/local-plan.ts`); AI -> engine; weather and places -> omitted. Test any new dependency's outage in `outage.api.test.ts`.
+- Stop your own dev and preview servers before `npm run build`: a running `wrangler dev` over `dist` locks files and the build fails with EPERM.

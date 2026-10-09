@@ -7,6 +7,25 @@ import { buildPrompt, extractJsonObject, validateChoice } from './prompt'
 const NEURONS_PER_M_INPUT = 9091
 const NEURONS_PER_M_OUTPUT = 27273
 
+/** Rejects with a timeout the moment `signal` aborts, even if `promise` never settles. */
+function withDeadline<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new AiUnavailableError('timeout', 'AI request timed out'))
+    if (signal.aborted) return onAbort()
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(v)
+      },
+      (e) => {
+        signal.removeEventListener('abort', onAbort)
+        reject(e)
+      },
+    )
+  })
+}
+
 export type AiOutcomeStatus = 'ok' | 'skipped' | 'invalid' | 'busy' | 'quota' | 'timeout' | 'error'
 
 export interface AiOutcome {
@@ -63,7 +82,9 @@ export async function refineWithAi(args: RefineArgs): Promise<{ recommendation: 
     const { request, context } = buildPrompt(profile, ctx, candidates, hint)
     outcome.attempts = attempt
     try {
-      const completion = await provider.complete(request, AbortSignal.timeout(remaining))
+      const signal = AbortSignal.timeout(remaining)
+      // Enforced HERE as well as in each provider: a provider that ignores the signal must never hang a request.
+      const completion = await withDeadline(provider.complete(request, signal), signal)
       outcome.model = completion.model
       if (completion.usage) {
         outcome.inputTokens = (outcome.inputTokens ?? 0) + completion.usage.inputTokens

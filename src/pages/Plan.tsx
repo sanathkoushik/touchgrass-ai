@@ -208,6 +208,11 @@ export default function Plan() {
             </div>
           )}
           <NearbyPlaces activityId={phase.rec.activity_id} location={place ? { lat: place.lat, lon: place.lon } : null} />
+          {phase.rec.persisted === false && (
+            <p className="px-1 text-sm text-muted-foreground">
+              This idea was made on your device because our server could not be reached, so it will not be remembered.
+            </p>
+          )}
           {phase.rec.fallback && (
             <p className="flex items-start gap-2 px-1 text-sm text-muted-foreground">
               <Footprints className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />

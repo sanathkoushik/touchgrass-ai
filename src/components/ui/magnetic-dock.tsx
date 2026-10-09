@@ -1,5 +1,5 @@
 import * as React from "react"
-import { motion, useMotionValue, useSpring, useTransform, AnimatePresence, useReducedMotion, type MotionValue } from "motion/react"
+import { m, useMotionValue, useSpring, useTransform, AnimatePresence, useReducedMotion, type MotionValue } from "motion/react"
 import { cn } from "@/lib/utils"
 
 interface MagneticDockProps {
@@ -87,7 +87,7 @@ function DockItem({
     const smoothY = useSpring(y, springConfig)
 
     return (
-        <motion.button
+        <m.button
             ref={ref}
             type="button"
             tabIndex={0}
@@ -113,7 +113,7 @@ function DockItem({
             whileTap={reducedMotion ? undefined : { scale: 0.9 }}
         >
             {/* Icon Container */}
-            <motion.div
+            <m.div
                 className={cn(
                     "relative w-full h-full rounded-2xl overflow-hidden",
                     "bg-gradient-to-b from-secondary to-card",
@@ -135,7 +135,7 @@ function DockItem({
                 </div>
 
                 {/* Shine effect */}
-                <motion.div
+                <m.div
                     className="absolute inset-0 pointer-events-none"
                     style={{
                         background:
@@ -143,12 +143,12 @@ function DockItem({
                         opacity: isHovered ? 0.9 : 0.5,
                     }}
                 />
-            </motion.div>
+            </m.div>
 
             {/* Badge */}
             <AnimatePresence initial={false}>
                 {item.badge !== undefined && item.badge > 0 && (
-                    <motion.div
+                    <m.div
                         initial={reducedMotion ? false : { scale: 0, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={reducedMotion ? { opacity: 0 } : { scale: 0, opacity: 0 }}
@@ -164,14 +164,14 @@ function DockItem({
                         )}
                     >
                         {item.badge > 99 ? "99+" : item.badge}
-                    </motion.div>
+                    </m.div>
                 )}
             </AnimatePresence>
 
             {/* Active Indicator */}
             <AnimatePresence initial={false}>
                 {item.isActive && (
-                    <motion.div
+                    <m.div
                         initial={reducedMotion ? false : { scale: 0, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={reducedMotion ? { opacity: 0 } : { scale: 0, opacity: 0 }}
@@ -187,7 +187,7 @@ function DockItem({
             {/* Tooltip */}
             <AnimatePresence initial={false}>
                 {showLabel && (
-                    <motion.div
+                    <m.div
                         aria-hidden="true"
                         initial={reducedMotion ? false : { opacity: 0, y: 8, scale: 0.9 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -214,12 +214,12 @@ function DockItem({
                                 "border-r border-b border-border"
                             )}
                         />
-                    </motion.div>
+                    </m.div>
                 )}
             </AnimatePresence>
 
             {/* Hover glow */}
-            <motion.div
+            <m.div
                 className="absolute inset-0 rounded-2xl pointer-events-none"
                 animate={{
                     boxShadow: isHovered
@@ -228,7 +228,7 @@ function DockItem({
                 }}
                 transition={{ duration: 0.3 }}
             />
-        </motion.button>
+        </m.button>
     )
 }
 
@@ -282,7 +282,7 @@ function MagneticDock({
     }
 
     return (
-        <motion.div
+        <m.div
             onMouseMove={reducedMotion ? undefined : handleMouseMove}
             onMouseLeave={handleMouseLeave}
             className={cn(
@@ -309,7 +309,7 @@ function MagneticDock({
                     reducedMotion={reducedMotion}
                 />
             ))}
-        </motion.div>
+        </m.div>
     )
 }
 

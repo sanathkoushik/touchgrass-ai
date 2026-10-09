@@ -33,7 +33,7 @@ export function ChoiceGroup<T extends string | number>({ label, options, value, 
             )}
           >
             <span className="block font-medium">{o.label}</span>
-            {o.hint && <span className="block text-xs opacity-70">{o.hint}</span>}
+            {o.hint && <span className={cn('block text-xs', selected ? 'text-foreground/85' : 'text-muted-foreground')}>{o.hint}</span>}
           </button>
         )
       })}

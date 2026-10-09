@@ -7,11 +7,14 @@ import type {
   HistoryResponse,
   ProfileInput,
   ProfilePatch,
+  ProfileLookupResponse,
   ProfileResponse,
   RecommendInput,
   RecommendResponse,
   UpgradeResponse,
 } from '@/shared/api'
+import { planOnDevice } from './local-plan'
+import { cacheProfile, clearCachedProfile, loadCachedProfile } from './mission-store'
 import { getSessionId } from './session'
 
 /** Anything that goes wrong talking to the server, in one shape the screens can handle. */
@@ -74,22 +77,68 @@ async function request<T>(method: string, path: string, { body, signal, timeoutM
   return json as T
 }
 
+/** Keeps a browser-side copy of the profile so a server-side storage outage does not stop recommendations. */
+function remember(res: ProfileResponse): ProfileResponse {
+  const p = res.profile
+  cacheProfile({
+    preferences: p.preferences,
+    motivators: p.motivators,
+    avoidances: p.avoidances,
+    equipment: p.equipment,
+    goals: p.goals ?? [],
+    best_windows: p.schedule_signals.best_windows,
+  })
+  return res
+}
+
 /** `null` means "no profile yet" (a normal state, not an error). */
 export async function getProfile(signal?: AbortSignal): Promise<ProfileResponse | null> {
   try {
-    return await request<ProfileResponse>('GET', '/api/profile', { signal })
+    const res = await request<ProfileLookupResponse>('GET', '/api/profile', { signal })
+    return res.profile === null ? null : remember(res as ProfileResponse)
   } catch (err) {
+    // Older servers answered 404 for "no profile yet"; still understood.
     if (err instanceof ApiError && err.code === 'profile_not_found') return null
     throw err
   }
 }
 
-export const saveProfile = (input: ProfileInput) => request<ProfileResponse>('POST', '/api/onboarding', { body: input })
-export const patchProfile = (patch: ProfilePatch) => request<ProfileResponse>('PATCH', '/api/profile', { body: patch })
-export const deleteProfile = () => request<{ deleted: boolean }>('DELETE', '/api/profile')
+export const saveProfile = async (input: ProfileInput) => remember(await request<ProfileResponse>('POST', '/api/onboarding', { body: input }))
+export const patchProfile = async (patch: ProfilePatch) => remember(await request<ProfileResponse>('PATCH', '/api/profile', { body: patch }))
+export const deleteProfile = async () => {
+  const r = await request<{ deleted: boolean }>('DELETE', '/api/profile')
+  clearCachedProfile() // "Delete my data" removes the browser copy too
+  return r
+}
 
-export const recommend = (input: RecommendInput, signal?: AbortSignal) =>
-  request<RecommendResponse>('POST', '/api/recommend', { body: input, signal })
+/** The server could not be reached or is broken (as opposed to answering "no" on purpose). */
+function serverUnreachable(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return false
+  return err.status === 0 ? err.code !== 'cancelled' : err.status >= 500 || err.code === 'bad_response'
+}
+
+export async function recommend(input: RecommendInput, signal?: AbortSignal): Promise<RecommendResponse> {
+  try {
+    return await request<RecommendResponse>('POST', '/api/recommend', { body: input, signal })
+  } catch (err) {
+    const cached = loadCachedProfile()
+    if (!cached || signal?.aborted) throw err
+
+    // 1. Saved data is unreachable but the server is up: retry ONCE with the profile kept in this browser.
+    if (err instanceof ApiError && err.code === 'storage_unavailable') {
+      try {
+        return await request<RecommendResponse>('POST', '/api/recommend', { body: { ...input, fallback_profile: cached }, signal })
+      } catch (second) {
+        if (!serverUnreachable(second)) throw second
+      }
+    } else if (!serverUnreachable(err)) {
+      throw err // e.g. "no profile yet" or "invalid request": the server answered on purpose, so respect it
+    }
+
+    // 2. The server cannot be reached at all: plan on this device with the same engine.
+    return planOnDevice(input, cached)
+  }
+}
 
 /**
  * Asks the server to improve a recommendation that is already on screen. Always resolves with

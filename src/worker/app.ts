@@ -16,6 +16,7 @@ import {
   type FeedbackResponse,
   type HistoryResponse,
   type ProfileInput,
+  type ProfileLookupResponse,
   type ProfileResponse,
   type ProfileStats,
   type RecommendResponse,
@@ -30,7 +31,8 @@ import type { AiProvider } from './ai/provider'
 import { refineWithAi } from './ai/refine'
 import type { NearbyProvider } from './context/overpass'
 import type { PlaceCache } from './context/place-cache'
-import { PLACE_KINDS, nearbyInputSchema, placeKindFor, type NearbyResponse } from '@/shared/places'
+import { PLACE_KINDS, placeKindFor, type NearbyResponse } from '@/shared/places'
+import { nearbyInputSchema } from '@/shared/places-schema'
 import type { Conditions, ContextProvider } from './context/provider'
 import type { Repository, StoredEvent } from './repository'
 import { localClock, offsetFromTimeZone } from './time'
@@ -67,6 +69,35 @@ const MAX_BODY_BYTES = 16 * 1024
 const HISTORY_WINDOW = 100
 
 // ------------------------------------------------------------------ helpers
+
+/** Saved data could not be read or written. Becomes a clean 503 instead of a crash. */
+export class StorageError extends Error {
+  constructor() {
+    super('storage unavailable')
+    this.name = 'StorageError'
+  }
+}
+
+/**
+ * Wraps a repository so ANY failure inside it surfaces as a StorageError (the original message is logged without data,
+ * never sent to the client).
+ */
+function guardRepository(repo: Repository): Repository {
+  return new Proxy(repo, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver)
+      if (typeof value !== 'function') return value
+      return async (...args: unknown[]) => {
+        try {
+          return await (value as (...a: unknown[]) => unknown).apply(target, args)
+        } catch (err) {
+          console.error(JSON.stringify({ t: 'storage_failed', op: String(prop), message: String((err as Error)?.message ?? err).slice(0, 200) }))
+          throw new StorageError()
+        }
+      }
+    },
+  })
+}
 
 function errorBody(code: string, message: string, details?: ApiErrorBody['error']['details']): ApiErrorBody {
   return { error: { code, message, ...(details ? { details } : {}) } }
@@ -167,7 +198,7 @@ function resolveOffsetMinutes(c: HonoContext<AppEnv>, clientOffset: number | und
 export function createApp({ repo: repoSource, now = () => new Date(), ai, context, places: placesProvider, placeCache }: AppDeps) {
   const app = new Hono<AppEnv>()
   const aiGate = ai?.gate ?? new AiGate()
-  const repoOf = (c: HonoContext<AppEnv>): Repository => (typeof repoSource === 'function' ? repoSource(c.env) : repoSource)
+  const repoOf = (c: HonoContext<AppEnv>): Repository => guardRepository(typeof repoSource === 'function' ? repoSource(c.env) : repoSource)
 
   app.use('*', secureHeaders())
 
@@ -217,7 +248,8 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
     const repo = repoOf(c)
     const userKey = c.get('userKey')
     const profile = await repo.getProfile(userKey)
-    if (!profile) return c.json(errorBody('profile_not_found', 'No profile yet. Complete onboarding first.'), 404)
+    // Not having a profile yet is the normal first-visit state, so it is a plain 200 (no red error in the browser console).
+    if (!profile) return c.json({ profile: null } satisfies ProfileLookupResponse)
     const body: ProfileResponse = { profile, stats: statsOf(await repo.listEvents(userKey, 1000)) }
     return c.json(body)
   })
@@ -254,7 +286,18 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
     const userKey = c.get('userKey')
     const input = c.req.valid('json')
 
-    const profile = await repo.getProfile(userKey)
+    // If saved data is unreachable but the browser sent its last-known profile, plan from that (no history, nothing saved).
+    let storageDown = false
+    let profile: StoredProfile | null
+    let storedHistory: StoredEvent[] = []
+    try {
+      profile = await repo.getProfile(userKey)
+      if (profile) storedHistory = await repo.listEvents(userKey, HISTORY_WINDOW)
+    } catch (err) {
+      if (!(err instanceof StorageError) || !input.fallback_profile) throw err
+      storageDown = true
+      profile = toStoredProfile(input.fallback_profile, now())
+    }
     if (!profile) return c.json(errorBody('profile_not_found', 'No profile yet. Complete onboarding first.'), 404)
 
     const at = now()
@@ -266,7 +309,7 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
     // The place's own clock when we know it (so "daylight" and "late at night" are right THERE), else the browser's.
     const offsetMinutes = conditions ? Math.round(conditions.utc_offset_seconds / 60) : resolveOffsetMinutes(c, input.utc_offset_minutes, at)
     const clock = localClock(at, offsetMinutes)
-    const history = toHistory(await repo.listEvents(userKey, HISTORY_WINDOW))
+    const history = toHistory(storedHistory)
     // The person's own choice wins; otherwise adapt to their energy and what has happened lately.
     const sizing = input.mode === 'auto' ? chooseMode(history, input.mood) : { mode: input.mode, cause: 'chosen' as const }
     const ctx: EngineContext = {
@@ -311,8 +354,9 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
     }
 
     const recommendationId = `r_${crypto.randomUUID()}`
-    let persisted = true
+    let persisted = !storageDown
     try {
+      if (storageDown) throw new StorageError() // already known to be down: do not wait on another failing call
       await repo.addEvent(userKey, {
         recommendation_id: recommendationId,
         activity_id: recommendation.activity_id,
@@ -521,6 +565,9 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
   app.notFound((c) => c.json(errorBody('not_found', 'No such endpoint'), 404))
 
   app.onError((err, c) => {
+    if (err instanceof StorageError) {
+      return c.json(errorBody('storage_unavailable', 'Your saved data is temporarily out of reach. Please try again in a moment.'), 503)
+    }
     if (err instanceof HTTPException) {
       const status = err.status
       return c.json(errorBody(status === 400 ? 'invalid_request' : 'http_error', err.message), status)

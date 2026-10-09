@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { m, useReducedMotion } from 'motion/react'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -14,7 +14,7 @@ type Props = {
 export function FeedbackButton({ icon: Icon, selected, onClick, children, disabled }: Props) {
   const reduce = useReducedMotion()
   return (
-    <motion.button
+    <m.button
       type="button"
       aria-pressed={selected}
       disabled={disabled}
@@ -31,6 +31,6 @@ export function FeedbackButton({ icon: Icon, selected, onClick, children, disabl
     >
       {Icon && <Icon className="size-5" />}
       {children}
-    </motion.button>
+    </m.button>
   )
 }

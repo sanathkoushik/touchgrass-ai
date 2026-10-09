@@ -114,9 +114,9 @@ describe.each(STORAGE_KINDS)('API on %s storage', (kind) => {
     it("keeps each session's data private", async () => {
       const { call } = setup()
       await onboard(call, SESSION_A)
-      const other = await call<ApiErrorBody>('GET', '/api/profile', { session: SESSION_B })
-      expect(other.status).toBe(404)
-      expect(other.json.error.code).toBe('profile_not_found')
+      const other = await call<{ profile: null }>('GET', '/api/profile', { session: SESSION_B })
+      expect(other.status).toBe(200) // "no profile yet" is a normal answer, and nothing of A's leaks
+      expect(other.json).toEqual({ profile: null })
     })
 
     it("one session cannot give feedback on another session's recommendation", async () => {
@@ -200,7 +200,9 @@ describe.each(STORAGE_KINDS)('API on %s storage', (kind) => {
       await onboard(call)
       await call('POST', '/api/recommend', { body: { duration_limit: 60 } })
       expect((await call('DELETE', '/api/profile')).status).toBe(200)
-      expect((await call('GET', '/api/profile')).status).toBe(404)
+      const gone = await call<{ profile: null }>('GET', '/api/profile')
+      expect(gone.status).toBe(200)
+      expect(gone.json).toEqual({ profile: null })
       expect((await call<HistoryResponse>('GET', '/api/history')).json.items).toEqual([])
     })
   })
@@ -282,9 +284,10 @@ describe.each(STORAGE_KINDS)('API on %s storage', (kind) => {
       }
       const { call } = setup({ repo: broken })
       const r = await call<ApiErrorBody>('POST', '/api/recommend', { body: { duration_limit: 60 } })
-      expect(r.status).toBe(500)
+      expect(r.status).toBe(503)
       expect(JSON.stringify(r.json)).not.toContain('secret')
-      expect(r.json.error.code).toBe('internal_error')
+      expect(JSON.stringify(r.json)).not.toContain('mongodb')
+      expect(r.json.error.code).toBe('storage_unavailable')
     })
   })
 

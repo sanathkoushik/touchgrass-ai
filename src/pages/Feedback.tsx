@@ -12,6 +12,8 @@ import { clearMission, loadMission } from '@/lib/mission-store'
 import { SKIP_REASON_LABELS } from '@/lib/vocab'
 
 interface Target {
+  /** True when the server could not save this mission (storage was down), so there is nothing to answer on the server. */
+  unsaved?: boolean
   id: string
   title: string
   firstStep?: string
@@ -43,14 +45,16 @@ export default function Feedback() {
   const navigate = useNavigate()
   const [target, setTarget] = useState<Target | null | 'loading'>(() => {
     const m = loadMission()
-    return m ? { id: m.recommendation.recommendation_id, title: m.recommendation.title, firstStep: m.recommendation.first_step } : 'loading'
+    return m
+      ? { id: m.recommendation.recommendation_id, title: m.recommendation.title, firstStep: m.recommendation.first_step, unsaved: m.recommendation.persisted === false }
+      : 'loading'
   })
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [enjoyment, setEnjoyment] = useState<number | null>(null)
   const [reason, setReason] = useState<SkipReason | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<{ outcome: Outcome; stats: ProfileStats | null } | null>(null)
+  const [done, setDone] = useState<{ outcome: Outcome; stats: ProfileStats | null; unsaved?: boolean } | null>(null)
 
   // Nothing saved in this browser? Ask the server for the most recent unanswered mission.
   useEffect(() => {
@@ -71,6 +75,12 @@ export default function Feedback() {
     if (target === 'loading' || target === null || !outcome) return
     setSaving(true)
     setError(null)
+    if (target.unsaved) {
+      // Nothing to update on the server: be honest, and do not make the person retry something that cannot work.
+      clearMission()
+      setDone({ outcome, stats: null, unsaved: true })
+      return
+    }
     try {
       await sendFeedback({
         recommendation_id: target.id,
@@ -96,6 +106,11 @@ export default function Feedback() {
       <section className="space-y-6">
         <div className="space-y-3 rounded-2xl border bg-card p-6">
           <h1 className="font-display text-3xl font-medium tracking-tight">{THANKS[done.outcome]}</h1>
+          {done.unsaved && (
+            <p className="text-muted-foreground">
+              Your saved history was out of reach when this idea was made, so this one was not recorded. Thank you for telling us anyway.
+            </p>
+          )}
           {s && s.responded > 0 && (
             <p className="text-muted-foreground">
               So far you have finished <strong className="text-foreground">{s.completed}</strong> of the{' '}

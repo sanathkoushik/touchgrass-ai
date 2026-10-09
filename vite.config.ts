@@ -3,6 +3,8 @@ import { cloudflare } from '@cloudflare/vite-plugin'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { inlineCss } from './scripts/inline-css-plugin.ts'
+import { staticHeaders } from './scripts/static-headers-plugin.ts'
 
 const withAi = process.env.TG_AI === '1'
 
@@ -11,7 +13,7 @@ export default defineConfig({
   // cloudflare() runs the Hono Worker in the real Workers runtime during `vite dev`,
   // and builds both the static client and the Worker for deployment.
   // The Workers AI binding is opt-in (TG_AI=1): see the note in wrangler.jsonc.
-  plugins: [react(), tailwindcss(), cloudflare(withAi ? { config: { ai: { binding: 'AI' } } } : {})],
+  plugins: [react(), tailwindcss(), inlineCss(), staticHeaders(), cloudflare(withAi ? { config: { ai: { binding: 'AI' } } } : {})],
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, './src') },
   },

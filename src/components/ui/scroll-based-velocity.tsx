@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import {
-    motion,
+    m,
     useScroll,
     useSpring,
     useTransform,
@@ -120,7 +120,7 @@ function ParallaxText({ children, baseVelocity = 100, pixelsPerSecond, className
 
     return (
         <div className="overflow-hidden whitespace-nowrap flex flex-nowrap" style={{ width: '100%' }}>
-            <motion.div
+            <m.div
                 ref={stripRef}
                 className={cn("flex whitespace-nowrap", className)}
                 style={{ x, skewX }}
@@ -128,7 +128,7 @@ function ParallaxText({ children, baseVelocity = 100, pixelsPerSecond, className
                 {Array.from({ length: 8 }).map((_, i) => (
                     <span key={i} className="block mr-10 last:mr-10">{children}</span>
                 ))}
-            </motion.div>
+            </m.div>
         </div>
     );
 }

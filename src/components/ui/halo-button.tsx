@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react"
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
-import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { AnimatePresence, m, useReducedMotion } from "motion/react"
 
 import { cn } from "@/lib/utils"
 
@@ -107,7 +107,7 @@ function StaggeredTextLabel({
   }, [text])
 
   return (
-    <motion.span
+    <m.span
       animate="visible"
       className="inline-flex items-center font-medium text-foreground text-sm tracking-tight antialiased"
       initial="hidden"
@@ -122,7 +122,7 @@ function StaggeredTextLabel({
       }}
     >
       {chars.map((glyph) => (
-        <motion.span
+        <m.span
           className="inline-block whitespace-pre"
           key={glyph.key}
           transition={{
@@ -135,9 +135,9 @@ function StaggeredTextLabel({
           }}
         >
           {glyph.char}
-        </motion.span>
+        </m.span>
       ))}
-    </motion.span>
+    </m.span>
   )
 }
 
@@ -150,7 +150,7 @@ function TrailingLoadingSlot({
 }) {
   const cross = trailingCrossfade(reduceMotion)
   return (
-    <motion.div
+    <m.div
       animate={
         reveal
           ? { opacity: 1, scale: 1 }
@@ -173,7 +173,7 @@ function TrailingLoadingSlot({
       }
     >
       <ButtonSpinner reduceMotion={reduceMotion} />
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -318,7 +318,7 @@ export function HaloButton({
   }
 
   return (
-    <motion.div
+    <m.div
       className={cn("relative inline-flex max-w-full", className)}
       layout={!reduceMotion}
       transition={reduceMotion ? undefined : { layout: layoutSpring }}
@@ -330,14 +330,14 @@ export function HaloButton({
     >
       <div className="relative rounded-full p-px">
         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
-          <motion.div
+          <m.div
             animate={{
               opacity: borderGlow.opacityIdle,
             }}
             className="absolute inset-x-0 bottom-0 h-1/2"
             transition={{ duration: 0.25, ease: "easeOut" }}
           >
-            <motion.div
+            <m.div
               animate={{
                 left: borderGlow.primaryLeft,
               }}
@@ -351,7 +351,7 @@ export function HaloButton({
                 ease: "easeInOut",
               }}
             />
-            <motion.div
+            <m.div
               animate={{
                 left: borderGlow.secondaryLeft,
               }}
@@ -365,7 +365,7 @@ export function HaloButton({
                 ease: "easeInOut",
               }}
             />
-            <motion.div
+            <m.div
               animate={{
                 left: borderGlow.tertiaryLeft,
               }}
@@ -379,7 +379,7 @@ export function HaloButton({
                 ease: "easeInOut",
               }}
             />
-          </motion.div>
+          </m.div>
         </div>
 
         <ButtonPrimitive
@@ -436,6 +436,6 @@ export function HaloButton({
           ) : null}
         </ButtonPrimitive>
       </div>
-    </motion.div>
+    </m.div>
   )
 }

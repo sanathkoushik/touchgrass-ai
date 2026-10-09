@@ -1,17 +1,22 @@
 import { lazy, Suspense } from 'react'
+import { LazyMotion } from 'motion/react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/components/AppLayout'
 import Home from '@/pages/Home'
-import Onboarding from '@/pages/Onboarding'
-import Plan from '@/pages/Plan'
-import Feedback from '@/pages/Feedback'
-import History from '@/pages/History'
-import NotFound from '@/pages/NotFound'
+
+// Only the first screen is in the main bundle. The other pages download when first visited.
+const Onboarding = lazy(() => import('@/pages/Onboarding'))
+const Plan = lazy(() => import('@/pages/Plan'))
+const Feedback = lazy(() => import('@/pages/Feedback'))
+const History = lazy(() => import('@/pages/History'))
+const NotFound = lazy(() => import('@/pages/NotFound'))
+const loadMotionFeatures = () => import('@/lib/motion-features').then((m) => m.default)
 
 const DevUi = import.meta.env.DEV ? lazy(() => import('@/pages/DevUi')) : null
 
 export default function App() {
   return (
+    <LazyMotion features={loadMotionFeatures}>
     <BrowserRouter>
       <Routes>
         {/* Full-bleed hero: manages its own layout and dock */}
@@ -36,5 +41,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </LazyMotion>
   )
 }

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { m, useReducedMotion } from 'motion/react'
 import { PixelCanvas } from '@/components/ui/pixel-canvas'
 import { Spotlight } from '@/components/ui/spotlight'
 import { cn } from '@/lib/utils'
@@ -50,7 +50,7 @@ export function MissionCard({ title, reason, firstStep, preparation, meta, actio
       />
       {meta && <div className="mb-4 flex flex-wrap gap-2">{meta}</div>}
       {/* Fades in again whenever transitionKey changes. The old text is replaced at once: no layout jump, no blank state. */}
-      <motion.div
+      <m.div
         key={transitionKey}
         initial={reduceMotion || transitionKey === undefined ? false : { opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
@@ -74,7 +74,7 @@ export function MissionCard({ title, reason, firstStep, preparation, meta, actio
             </ul>
           </div>
         )}
-      </motion.div>
+      </m.div>
       {actions && <div className="mt-6 flex flex-wrap items-center gap-3">{actions}</div>}
     </article>
   )

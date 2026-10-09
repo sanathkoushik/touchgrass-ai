@@ -1,3 +1,4 @@
+import type { ProfileInput } from '@/shared/api'
 import type { RecommendResponse } from '@/shared/api'
 
 const KEY = 'tg_mission'
@@ -63,5 +64,40 @@ export function setProfileHint(has: boolean): void {
     else localStorage.removeItem(PROFILE_HINT)
   } catch {
     /* storage unavailable */
+  }
+}
+
+/**
+ * The person's last-known profile, kept ONLY in this browser. It is sent to the server only if saved data is
+ * unreachable, so a database outage still gives a real recommendation (see `fallback_profile`).
+ */
+const PROFILE_CACHE = 'tg_profile_cache'
+
+export function cacheProfile(profile: ProfileInput): void {
+  try {
+    localStorage.setItem(PROFILE_CACHE, JSON.stringify(profile))
+  } catch {
+    /* the fallback is a nice-to-have */
+  }
+}
+
+export function loadCachedProfile(): ProfileInput | null {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE)
+    if (!raw) return null
+    const p = JSON.parse(raw) as Partial<ProfileInput>
+    // Cheap shape check; the server validates it strictly again before using it.
+    if (!p || typeof p !== 'object' || !p.preferences || !Array.isArray(p.motivators) || !Array.isArray(p.equipment)) return null
+    return p as ProfileInput
+  } catch {
+    return null
+  }
+}
+
+export function clearCachedProfile(): void {
+  try {
+    localStorage.removeItem(PROFILE_CACHE)
+  } catch {
+    /* nothing to clear */
   }
 }

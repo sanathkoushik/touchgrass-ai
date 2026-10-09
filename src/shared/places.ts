@@ -1,6 +1,3 @@
-import { z } from 'zod'
-import { locationSchema } from './context'
-
 /**
  * Real places near the person, from OpenStreetMap. Deliberately small: a few names and distances for the
  * activity being suggested, not a map. Only activities that really happen AT a kind of place are listed here.
@@ -61,11 +58,7 @@ export function placeKindFor(activityId: string): PlaceKindId | null {
 }
 
 // ------------------------------------------------------------------ API shapes
-
-export const nearbyInputSchema = z.strictObject({
-  location: locationSchema,
-  activity_id: z.string().trim().min(1).max(60),
-})
+// (The request schema is in ./places-schema.ts so the browser never imports zod.)
 
 export interface NearbyPlace {
   name: string

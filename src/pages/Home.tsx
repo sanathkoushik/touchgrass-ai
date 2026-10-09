@@ -34,6 +34,17 @@ export default function Home() {
     return () => ac.abort()
   }, [])
 
+  // While the person reads the headline, quietly fetch the page the button leads to, so tapping it is instant.
+  // Skipped on "data saver", and it waits a moment so it never competes with the first paint.
+  useEffect(() => {
+    const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData
+    if (saveData) return
+    const prefetch = () => void (hasProfile ? import('@/pages/Plan') : import('@/pages/Onboarding'))
+    // A short delay (not requestIdleCallback: Safari lacks it) keeps this out of the first paint.
+    const id = window.setTimeout(prefetch, 2000)
+    return () => window.clearTimeout(id)
+  }, [hasProfile])
+
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-background">
       {/* ---- top 3/4: photo field + hero ---- */}

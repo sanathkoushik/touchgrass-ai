@@ -9,7 +9,30 @@
     <title>TouchGrass AI</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!--
+        First-paint shell for the home screen ("/"): the headline paints from HTML + CSS alone, before any JavaScript
+        has downloaded. React replaces it on start-up with the identical layout (same classes, same sizes, a spacer where
+        the button goes), so nothing moves. Other routes remove it immediately (script below).
+      -->
+      <div id="shell" class="flex h-svh flex-col overflow-hidden bg-background">
+        <section class="flex basis-3/4 items-center justify-center">
+          <main class="mx-auto max-w-2xl px-6 text-center">
+            <p class="text-xs font-medium tracking-[0.25em] text-primary uppercase">TouchGrass AI</p>
+            <h1 class="font-display mt-4 text-5xl leading-[1.05] font-medium tracking-tight text-balance sm:text-7xl">
+              It learns what gets you <span class="text-primary">outside.</span>
+            </h1>
+            <p class="mx-auto mt-5 max-w-md text-base text-balance text-muted-foreground sm:text-lg">
+              One real-world mission at a time, picked for you. Then you put the phone down.
+            </p>
+            <div class="mt-8 flex justify-center"><div class="h-[46px]"></div></div>
+          </main>
+        </section>
+      </div>
+    </div>
+    <script>
+      if (location.pathname !== '/') document.getElementById('shell').remove()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
