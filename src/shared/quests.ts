@@ -1,48 +1,13 @@
-import { getActivity } from './engine/activities'
-import type { Family } from './engine/types'
+import { PROMPTS, promptKind } from './engine/companion'
 
 /**
- * Side quests: one small, playful thing to look for or do DURING a mission, so the person is taking part in it
- * instead of waiting for it to end (the report's scavenger and photo challenges). Nothing here needs money, a
- * stranger, or anything risky, and all of it can be done with the phone in a pocket.
+ * The prompt for while the person is out: ONE optional, activity-specific thing to notice or try, never a checklist.
+ * (Walking gets a walking prompt, exploring an exploring one, a social activity a social one, calm ones a calm one.)
+ * Nothing here needs money, a stranger, or anything risky, and all of it can be done with the phone in a pocket.
  *
- * Which two a mission gets is a pure function of its id, so the same mission always shows the same two (even after a
- * reload or while offline) and nothing needs to be stored.
+ * Which of an activity's three prompts a mission gets is a pure function of its id, so the same mission always shows
+ * the same prompt (after a reload, or offline) and nothing needs to be stored.
  */
-const ANYWHERE = [
-  'Notice three different sounds and where each one comes from.',
-  'Find something that is moving and something that is perfectly still.',
-  'Find the best shade of green you can see.',
-  'Look up for ten seconds. What is up there that you usually miss?',
-  'Spot something that has been here much longer than you have.',
-  'Find one thing that smells good, or one that smells surprising.',
-  'Keep the phone in your pocket for the first ten minutes.',
-  'Find something small and interesting that most people walk past.',
-]
-
-const BY_FAMILY: Record<Family, string[]> = {
-  movement: [
-    'Notice how your breathing settles after the first five minutes.',
-    'Pick a landmark ahead and reach it without checking your phone.',
-    'Find the steepest or roughest bit of your route and take it slowly.',
-    'Walk or move one stretch with your shoulders dropped and your jaw loose.',
-    'Notice which part of your body feels best right now.',
-  ],
-  exploration: [
-    'Find something yellow.',
-    'Take one photo you would actually print.',
-    'Find the oldest-looking thing on your route.',
-    'Find a view you could not see from where you started.',
-    'Spot three different kinds of tree, roof or flower.',
-  ],
-  social_skill: [
-    'Learn one new thing about the person you are with, or about the thing you are practising.',
-    'Do one move or moment a little better than your first try.',
-    'Make someone smile, or make yourself smile once.',
-    'Say out loud one thing you are enjoying right now.',
-    'Try one version of this you have never tried before.',
-  ],
-}
 
 /** FNV-1a: tiny, stable, no dependencies. */
 function hash(text: string): number {
@@ -54,15 +19,12 @@ function hash(text: string): number {
   return h >>> 0
 }
 
-export const QUESTS_PER_MISSION = 2
+export const QUESTS_PER_MISSION = 1
 
-/** Two different side quests for a mission: one in the activity's own style, one that works anywhere. */
+/** The one prompt for this mission (returned as a list so the screens can treat it uniformly). */
 export function questsFor(activityId: string, missionId: string): string[] {
-  const family = getActivity(activityId)?.family ?? 'movement'
-  const own = BY_FAMILY[family]
-  const first = own[hash(`${missionId}|own`) % own.length]!
-  const second = ANYWHERE[hash(`${missionId}|any`) % ANYWHERE.length]!
-  return [first, second].slice(0, QUESTS_PER_MISSION)
+  const bank = PROMPTS[promptKind(activityId)]
+  return [bank[hash(`${missionId}|${activityId}`) % bank.length]!]
 }
 
-export const ALL_QUESTS: readonly string[] = [...ANYWHERE, ...Object.values(BY_FAMILY).flat()]
+export const ALL_QUESTS: readonly string[] = Object.values(PROMPTS).flat()

@@ -25,7 +25,7 @@ const PROFILE = {
 /** A repository whose every call fails like an unreachable database, with a secret in the message. */
 function downRepo(): Repository {
   const fail = () => Promise.reject(new Error('D1_ERROR: connect ECONNRESET db.internal.example password=hunter2'))
-  return { getProfile: fail, saveProfile: fail, deleteUser: fail, addEvent: fail, getEvent: fail, updateEvent: fail, listEvents: fail, listCredited: fail }
+  return { getProfile: fail, saveProfile: fail, deleteUser: fail, addEvent: fail, getEvent: fail, updateEvent: fail, listEvents: fail, listCredited: fail, listAnswered: fail, flowStats: fail }
 }
 
 function setup(opts: { repo?: Repository; ai?: AiProvider; context?: ContextProvider } = {}) {
@@ -64,6 +64,13 @@ describe('database outage', () => {
       ['POST', '/api/feedback', { recommendation_id: 'r_00000000-0000-4000-8000-000000000001', outcome: 'completed' }],
       ['GET', '/api/history'],
       ['GET', '/api/meadow'],
+      ['GET', '/api/learned'],
+      ['POST', '/api/learned/respond', { id: 'barrier:too_far', action: 'dismiss' }],
+      ['DELETE', '/api/learned'],
+      ['GET', '/api/memories'],
+      ['PATCH', '/api/memories/r_00000000-0000-4000-8000-000000000001', { note: 'x' }],
+      ['GET', '/api/missions'],
+      ['GET', '/api/metrics'],
     ]
     for (const [method, path, body] of calls) {
       const r = await s.call<ApiErrorBody>(method, path, body)
@@ -134,7 +141,7 @@ describe('database outage', () => {
 describe('writes failing while reads work (partial outage)', () => {
   it('the recommendation still arrives, marked as not saved', async () => {
     const base = new MemoryRepository()
-    const repo: Repository = { ...downRepo(), getProfile: (k) => base.getProfile(k), saveProfile: (k, p) => base.saveProfile(k, p), listEvents: (k, n) => base.listEvents(k, n) }
+    const repo: Repository = { ...downRepo(), getProfile: (k) => base.getProfile(k), saveProfile: (k, p) => base.saveProfile(k, p), listEvents: (k, n) => base.listEvents(k, n), listAnswered: (k, n) => base.listAnswered(k, n) }
     const s = setup({ repo })
     await s.call('POST', '/api/onboarding', PROFILE)
     const r = await s.call<RecommendResponse>('POST', '/api/recommend', { duration_limit: 45, use_ai: false })

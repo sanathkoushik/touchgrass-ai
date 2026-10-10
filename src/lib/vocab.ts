@@ -92,6 +92,7 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
   no_friend: 'No one to join',
   too_costly: 'Costs too much',
   boring: 'Not exciting',
+  couldnt_start: 'I could not get started',
   other: 'Something else',
 }
 

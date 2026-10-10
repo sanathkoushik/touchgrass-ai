@@ -116,6 +116,8 @@ export interface UserProfile {
   goals?: Goal[]
   /** Gear the user actually owns. */
   equipment: Equipment[]
+  /** Activities the person asked never to see again (by activity id). */
+  avoid_activities?: string[]
 }
 
 export const OUTCOMES = ['completed', 'partial', 'skipped', 'changed'] as const
@@ -129,9 +131,28 @@ export const SKIP_REASONS = [
   'no_friend',
   'too_costly',
   'boring',
+  'couldnt_start',
   'other',
 ] as const
 export type SkipReason = (typeof SKIP_REASONS)[number]
+
+/** What the person wants out of this particular mission (asked in the daily check-in). */
+export const DESIRED_OUTCOMES = ['clear_head', 'energise', 'break_routine', 'connect'] as const
+export type DesiredOutcome = (typeof DESIRED_OUTCOMES)[number]
+
+/** How they feel afterwards compared with before. */
+export const FEELINGS = ['calmer', 'more_energetic', 'happier', 'same', 'more_tired'] as const
+export type Feeling = (typeof FEELINGS)[number]
+
+/** What made a mission easier. (What made it harder reuses SKIP_REASONS: one shared vocabulary for barriers.) */
+export const HELPERS = ['clear_plan', 'company', 'music_or_podcast', 'good_weather', 'kept_short', 'noticing_things'] as const
+export type Helper = (typeof HELPERS)[number]
+
+export const WOULD_REPEAT = ['yes', 'maybe', 'no'] as const
+export type WouldRepeat = (typeof WOULD_REPEAT)[number]
+
+/** What really happened, in the person's terms: derived from the outcome, never from "evidence". */
+export type ParticipationStatus = 'full' | 'partial' | 'not_started' | 'something_else'
 
 /** One past recommendation and what happened with it. */
 export interface HistoryEvent {
@@ -142,6 +163,18 @@ export interface HistoryEvent {
   /** 1-5, only meaningful for completed/partial. */
   enjoyment?: number
   skip_reason?: SkipReason
+  /** Minutes the app planned for it. */
+  planned_min?: number
+  /** How they felt afterwards compared with before. */
+  feeling?: Feeling
+  would_repeat?: WouldRepeat
+  /** What made it harder (same vocabulary as skip reasons). */
+  barrier?: SkipReason
+  helper?: Helper
+  /** Who it was done with. */
+  social_mode?: SocialMode
+  /** UTC ISO time they answered. Used to honour "reset what you have learned". */
+  responded_at?: string
 }
 
 // ------------------------------------------------------------------ context
@@ -163,7 +196,7 @@ export const ACTIVITY_MODES = ['minimum', 'normal', 'excellent'] as const
 export type ActivityMode = (typeof ACTIVITY_MODES)[number]
 
 /** Why a mode was used, so the explanation can be true: asked for, recovery after skips, low energy, or momentum. */
-export type ModeCause = 'chosen' | 'recovery' | 'low_energy' | 'momentum'
+export type ModeCause = 'chosen' | 'recovery' | 'low_energy' | 'momentum' | 'hard_start'
 
 export const MOODS = ['low', 'ok', 'high'] as const
 export type Mood = (typeof MOODS)[number]
@@ -177,6 +210,12 @@ export interface Context {
   /** Defaults to 'normal'. */
   mode?: ActivityMode
   mode_cause?: ModeCause
+  /** What the person wants out of this one, if they said. */
+  desired_outcome?: DesiredOutcome
+  /** Patterns learned from the person's own answers (tentative; see shared/learned.ts). */
+  learned?: LearnedSignal[]
+  /** Is it the weekend where the person is? Lets learned weekday/weekend patterns apply. */
+  weekend?: boolean
   /** Local hour 0-23. */
   hour: number
   /** Real daylight if known (e.g. from sunrise/sunset); otherwise derived from the hour. */
@@ -206,6 +245,8 @@ export type ScoreComponent =
   | 'duration_fit'
   | 'friction'
   | 'mood_fit'
+  | 'outcome_fit'
+  | 'learned'
 
 export interface ScoredActivity {
   activity: Activity
@@ -218,6 +259,10 @@ export interface ScoredActivity {
     declared_like: string | null
     /** A stated goal this activity supports, if any. */
     declared_goal: Goal | null
+    /** The desired outcome this activity genuinely serves, if the person named one. */
+    outcome_fit: DesiredOutcome | null
+    /** The wording of the strongest learned pattern that favoured this activity (tentative). */
+    learned_text: string | null
     /** Average enjoyment (1-5) the person gave THIS activity, with how many ratings it is based on. */
     observed_enjoyment_avg: number | null
     observed_enjoyment_n: number
@@ -241,10 +286,62 @@ export interface Recommendation {
   mode: ActivityMode
   /** What to have ready, derived from the activity's real equipment and optional extras. May be empty. */
   preparation: string[]
+  /** The assistant's help before, during and after: a note, small steps, a two-minute start, an indoor alternative. */
+  companion: Companion
   /** A second, safer option when there is one. */
   fallback: { activity_id: string; title: string; first_step: string } | null
   /** Where this came from, so the UI and logs can tell the difference. */
   source: 'deterministic' | 'ai'
   /** The model that wrote the wording, when source is 'ai'. */
   model?: string
+}
+
+// ---------------------------------------------------------------- companion
+
+export interface MissionStep {
+  minutes: number
+  title: string
+  detail: string
+}
+
+/**
+ * Everything the assistant says to make starting easier. Built only from the person's own check-in and the activity's
+ * own data (no invented claims), so it also works offline.
+ */
+export interface Companion {
+  /** One short paragraph for the moment before starting. */
+  note: string
+  /** The mission broken into small steps; the minutes add up to the planned time. */
+  steps: MissionStep[]
+  /** A tiny way to begin: "just two minutes". Always present. */
+  tiny_start: { minutes: number; text: string }
+  /** For when going out is not possible, or too much today (a window, a balcony). Null when the activity is already easy to do anywhere. */
+  alternative: string | null
+}
+
+// ------------------------------------------------------------------ learning
+
+export const LEARNED_KINDS = [
+  'enjoys_kind',
+  'easy_time',
+  'hard_time',
+  'duration_fit',
+  'barrier',
+  'appeal',
+  'calming',
+  'repetitive',
+  'skipped_often',
+  'no_change',
+] as const
+export type LearnedKind = (typeof LEARNED_KINDS)[number]
+
+/** The part of a learned pattern the engine needs. The full item (with its evidence and controls) is in shared/learned.ts. */
+export interface LearnedSignal {
+  /** Stable across recalculations, e.g. "enjoys_kind:exploration". The person can confirm or dismiss it by this id. */
+  id: string
+  kind: LearnedKind
+  key: string
+  strength: 'tentative' | 'consistent'
+  /** Plain, tentative wording shown to the person. */
+  text: string
 }

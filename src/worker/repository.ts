@@ -1,5 +1,9 @@
 import type { StoredProfile } from '@/shared/api'
-import type { ActivityMode, ModeCause, Mood, Outcome, SkipReason, WeatherCategory } from '@/shared/engine/types'
+import type { FlowStat } from '@/shared/metrics'
+import type { Reflection } from '@/shared/mission-record'
+
+export type { FlowStat }
+import type { ActivityMode, DesiredOutcome, ModeCause, Mood, Outcome, SkipReason, SocialMode, WeatherCategory } from '@/shared/engine/types'
 
 /** One recommendation and what happened to it. `pending` until the user reports back. */
 export interface StoredEvent {
@@ -16,6 +20,10 @@ export interface StoredEvent {
   minutes_outside?: number
   /** Side quests ticked off during this mission. */
   quests_done?: number
+  /** When the person set off (ISO), from the "Let's go" tap on their device. */
+  started_at?: string
+  /** What they told us afterwards. The photo, if any, stays on their device. */
+  reflection?: Reflection
   context: {
     duration_limit: number
     mood: Mood
@@ -23,6 +31,14 @@ export interface StoredEvent {
     hour: number
     /** Minutes the app planned, so time outside can be credited honestly later. */
     planned_min?: number
+    /** What they wanted out of this one, from the check-in. */
+    desired_outcome?: DesiredOutcome
+    /** Who it was planned for (solo, with a friend, small group). */
+    social_mode?: SocialMode
+    /** Which flow they had: the Mission Companion or the earlier plain one (see the experiment switch). */
+    flow?: 'companion' | 'classic'
+    /** When the recommendation was made (UTC ISO). */
+    created_at?: string
     /** How big this recommendation was, and why, so the AI upgrade rebuilds the same situation. */
     mode?: ActivityMode
     mode_cause?: ModeCause
@@ -59,6 +75,13 @@ export interface Repository {
    * (time outside, milestones) is built from them and must never shrink.
    */
   listCredited(userKey: string, limit: number): Promise<StoredEvent[]>
+  /**
+   * Newest first: every ANSWERED mission (anything but pending), of any age. Honest "it did not happen" answers are
+   * kept like the completed ones, because the Meadow recognises them and what is learned is built from them.
+   */
+  listAnswered(userKey: string, limit: number): Promise<StoredEvent[]>
+  /** Anonymous totals per flow across everyone, for the experiment. Contains no user identifiers. */
+  flowStats(): Promise<FlowStat[]>
 }
 
 const MAX_EVENTS_PER_USER = 500
@@ -87,9 +110,10 @@ export class MemoryRepository implements Repository {
     // Same rule as the database primary key (user_key, recommendation_id).
     if (list.some((x) => x.recommendation_id === event.recommendation_id)) throw new Error('duplicate recommendation id')
     list.push(structuredClone(event))
-    // Bound memory: drop the oldest events beyond the cap, but keep completed/partial ones (the Meadow is built from them).
+    // Bound memory: drop the oldest UNANSWERED events beyond the cap. Answered ones (the Meadow and what is learned are
+    // built from them) go only if there is nothing else left to drop.
     while (list.length > MAX_EVENTS_PER_USER) {
-      const i = list.findIndex((x) => x.outcome !== 'completed' && x.outcome !== 'partial')
+      const i = list.findIndex((x) => x.outcome === 'pending')
       list.splice(i === -1 ? 0 : i, 1)
     }
     this.events.set(userKey, list)
@@ -110,6 +134,36 @@ export class MemoryRepository implements Repository {
   async listEvents(userKey: string, limit: number) {
     const list = this.events.get(userKey) ?? []
     return structuredClone(list.slice(-limit).reverse())
+  }
+
+  async listAnswered(userKey: string, limit: number) {
+    const list = (this.events.get(userKey) ?? []).filter((e) => e.outcome !== 'pending')
+    return structuredClone(list.slice(-limit).reverse())
+  }
+
+  async flowStats(): Promise<FlowStat[]> {
+    const arms = new Map<'companion' | 'classic', StoredEvent[]>()
+    for (const list of this.events.values()) {
+      for (const e of list) {
+        const flow = e.context.flow ?? 'companion'
+        arms.set(flow, [...(arms.get(flow) ?? []), e])
+      }
+    }
+    return [...arms.entries()].map(([flow, events]) => {
+      const rated = events.filter((e) => typeof e.enjoyment === 'number')
+      return {
+        flow,
+        recommendations: events.length,
+        started: events.filter((e) => e.outcome === 'completed' || e.outcome === 'partial').length,
+        full: events.filter((e) => e.outcome === 'completed').length,
+        partial: events.filter((e) => e.outcome === 'partial').length,
+        declined: events.filter((e) => e.outcome === 'skipped' || e.outcome === 'changed').length,
+        unanswered: events.filter((e) => e.outcome === 'pending').length,
+        average_enjoyment: rated.length ? Math.round((rated.reduce((s, e) => s + (e.enjoyment ?? 0), 0) / rated.length) * 100) / 100 : null,
+        would_repeat_yes: events.filter((e) => e.reflection?.would_repeat === 'yes').length,
+        with_reflection: events.filter((e) => e.reflection && Object.keys(e.reflection).length > 0).length,
+      }
+    })
   }
 
   async listCredited(userKey: string, limit: number) {

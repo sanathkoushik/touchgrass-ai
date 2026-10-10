@@ -52,6 +52,8 @@ export function buildPrompt(
       minutes_available: ctx.duration_limit,
       energy: ctx.mood,
       size: ctx.mode ?? 'normal',
+      // What they said they want out of this one (a fixed word, never free text).
+      ...(ctx.desired_outcome ? { goal: ctx.desired_outcome } : {}),
       friend_free: ctx.social_available,
       local_hour: ctx.hour,
       // Real conditions, only when we have them. The model may mention these but must not invent any others.

@@ -51,6 +51,7 @@ const MISSION = {
   persisted: true,
   mode: 'normal' as const,
   preparation: [] as string[],
+  companion: { note: 'n', steps: [], tiny_start: { minutes: 2, text: 't' }, alternative: null },
 }
 
 afterEach(() => {

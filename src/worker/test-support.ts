@@ -1,6 +1,7 @@
 import { getPlatformProxy } from 'wrangler'
 import initSql from '../../migrations/0001_init.sql?raw'
 import meadowSql from '../../migrations/0003_meadow.sql?raw'
+import companionSql from '../../migrations/0004_mission_companion.sql?raw'
 import { D1Repository } from './d1-repository'
 import { MemoryRepository, type Repository } from './repository'
 
@@ -19,6 +20,8 @@ export interface Harness {
   reset(): Promise<void>
   /** The user keys that currently have a profile (for asserting only hashes are stored). */
   profileKeys(): Promise<string[]>
+  /** D1 only: run a raw statement (used to simulate corrupt data). */
+  rawExec?(sql: string): Promise<void>
   dispose(): Promise<void>
 }
 
@@ -50,7 +53,7 @@ export async function makeHarness(kind: StorageKind): Promise<Harness> {
   // The real `DB` binding from wrangler.jsonc, backed by an ephemeral (in-memory) local D1 database.
   const proxy = await getPlatformProxy<Env>({ persist: false })
   const db = proxy.env.DB
-  for (const stmt of [...statementsOf(initSql), ...statementsOf(meadowSql)]) await db.prepare(stmt).run()
+  for (const stmt of [...statementsOf(initSql), ...statementsOf(meadowSql), ...statementsOf(companionSql)]) await db.prepare(stmt).run()
 
   return {
     kind,
@@ -59,6 +62,9 @@ export async function makeHarness(kind: StorageKind): Promise<Harness> {
       await db.batch([db.prepare('DELETE FROM events'), db.prepare('DELETE FROM profiles')])
     },
     profileKeys: async () => (await db.prepare('SELECT user_key FROM profiles').all<{ user_key: string }>()).results.map((r) => r.user_key),
+    rawExec: async (sql) => {
+      await db.prepare(sql).run()
+    },
     dispose: async () => {
       await proxy.dispose()
     },

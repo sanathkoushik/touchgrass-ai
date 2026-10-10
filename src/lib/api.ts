@@ -88,6 +88,7 @@ function remember(res: ProfileResponse): ProfileResponse {
     equipment: p.equipment,
     goals: p.goals ?? [],
     best_windows: p.schedule_signals.best_windows,
+    ...(p.avoid_activities && p.avoid_activities.length > 0 ? { avoid_activities: p.avoid_activities } : {}),
   })
   return res
 }

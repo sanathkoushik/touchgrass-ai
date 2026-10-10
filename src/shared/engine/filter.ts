@@ -79,6 +79,9 @@ export function rejectionReasons(activity: Activity, profile: UserProfile, ctx: 
     reasons.push('costs too much (user avoids)')
   }
 
+  // Things the person explicitly asked never to see again.
+  if (profile.avoid_activities?.includes(activity.id)) reasons.push('asked not to see this again')
+
   // Energy.
   if (effectiveMood(ctx) === 'low' && activity.intensity === 3) {
     reasons.push('too intense for a low-energy moment')

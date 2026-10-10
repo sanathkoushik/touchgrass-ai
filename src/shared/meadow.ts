@@ -1,5 +1,5 @@
 import { getActivity } from './engine/activities'
-import type { Family, Outcome } from './engine/types'
+import type { Family, Outcome, SocialMode } from './engine/types'
 
 /**
  * The Meadow: how the app says "well done" without ever scolding.
@@ -21,6 +21,12 @@ export interface MeadowEvent {
   quests_done?: number
   /** What the app planned for this mission. */
   planned_min?: number
+  /** Who it was done with. */
+  social_mode?: SocialMode
+  /** They wrote something down (a memory). The text itself is not needed here. */
+  has_note?: boolean
+  /** They attached a photo (it stays on their device). */
+  has_photo?: boolean
 }
 
 const isCredited = (e: MeadowEvent) => e.outcome === 'completed' || e.outcome === 'partial'
@@ -55,6 +61,10 @@ export const MILESTONE_IDS = [
   'comeback',
   'quester',
   'loved_it',
+  'honest_checkins',
+  'memory_keeper',
+  'grown_to_enjoy',
+  'connected',
 ] as const
 export type MilestoneId = (typeof MILESTONE_IDS)[number]
 
@@ -78,6 +88,12 @@ interface Totals {
   early: boolean
   evening: boolean
   comeback: boolean
+  /** Honest check-ins: missions that did not happen (or happened differently) and were reported anyway. */
+  seeds: number
+  keepsakes: number
+  social: number
+  /** Activities they have grown to enjoy (3+ times, rated 4 or more on average). */
+  trees: Set<string>
 }
 
 interface Def {
@@ -147,10 +163,20 @@ const DEFS: Def[] = [
   {
     id: 'quester',
     title: 'Side-quest finder',
-    description: 'Ten side quests ticked off along the way.',
+    description: 'Ten of the little prompts tried along the way.',
     progress: (t) => ({ current: Math.min(t.quests, 10), target: 10 }),
     test: (t) => t.quests >= 10,
   },
+  {
+    id: 'honest_checkins',
+    title: 'Honest check-ins',
+    description: 'You told us the truth three times, even when it did not go to plan. That helps more than a perfect record.',
+    progress: (t) => ({ current: Math.min(t.seeds, 3), target: 3 }),
+    test: (t) => t.seeds >= 3,
+  },
+  { id: 'memory_keeper', title: 'Kept a memory', description: 'You wrote something down, or kept a photo, to remember a mission by.', test: (t) => t.keepsakes >= 1 },
+  { id: 'grown_to_enjoy', title: 'Grown to enjoy it', description: 'Something you have done three times and rated highly now has a tree in your meadow.', test: (t) => t.trees.size >= 1 },
+  { id: 'connected', title: 'Better together', description: 'You did a mission with someone else.', test: (t) => t.social >= 1 },
   {
     id: 'loved_it',
     title: 'Three great ones',
@@ -185,11 +211,28 @@ function walkMilestones(events: MeadowEvent[]): { milestones: Milestone[]; total
     early: false,
     evening: false,
     comeback: false,
+    seeds: 0,
+    keepsakes: 0,
+    social: 0,
+    trees: new Set(),
   }
+  const ratingsBy = new Map<string, number[]>()
+  const doneBy = new Map<string, number>()
   const earnedAt = new Map<MilestoneId, string>()
   let lastTs: string | null = null
 
-  for (const e of chronological(events).filter(isCredited)) {
+  const check = (ts: string) => {
+    for (const d of DEFS) if (!earnedAt.has(d.id) && d.test(totals)) earnedAt.set(d.id, ts)
+  }
+
+  for (const e of chronological(events)) {
+    if (e.outcome === 'pending') continue
+    if (!isCredited(e)) {
+      // Telling us it did not happen is honest, and it is recognised (a seed), but it never adds time.
+      totals.seeds += 1
+      check(e.timestamp)
+      continue
+    }
     totals.minutes += creditedMinutes(e)
     totals.missions += 1
     totals.quests += e.quests_done ?? 0
@@ -197,13 +240,18 @@ function walkMilestones(events: MeadowEvent[]): { milestones: Milestone[]; total
     if (family) totals.families.add(family)
     totals.activities.add(e.activity_id)
     if (e.enjoyment === 5) totals.loved += 1
+    if (e.has_note || e.has_photo) totals.keepsakes += 1
+    if (e.social_mode === 'with_friend' || e.social_mode === 'small_group') totals.social += 1
+    doneBy.set(e.activity_id, (doneBy.get(e.activity_id) ?? 0) + 1)
+    if (typeof e.enjoyment === 'number') ratingsBy.set(e.activity_id, [...(ratingsBy.get(e.activity_id) ?? []), e.enjoyment])
+    const r = ratingsBy.get(e.activity_id) ?? []
+    if ((doneBy.get(e.activity_id) ?? 0) >= 3 && r.length >= 2 && r.reduce((a, b) => a + b, 0) / r.length >= 4) totals.trees.add(e.activity_id)
     const h = hourOf(e.timestamp)
     if (h >= 5 && h < 9) totals.early = true
     if (h >= 17 && h < 20) totals.evening = true
     if (lastTs !== null && daysBetween(lastTs, e.timestamp) >= 7) totals.comeback = true
     lastTs = e.timestamp
-
-    for (const d of DEFS) if (!earnedAt.has(d.id) && d.test(totals)) earnedAt.set(d.id, e.timestamp)
+    check(e.timestamp)
   }
 
   const milestones: Milestone[] = DEFS.map((d) => ({
@@ -248,6 +296,21 @@ export interface MeadowSummary {
   /** The unearned milestone you are closest to, if any. */
   next: Milestone | null
   favourite: { activity_id: string; title: string; count: number } | null
+  /** What the meadow holds besides grass and flowers: a record of experiences, not a score. */
+  garden: Garden
+}
+
+export interface Garden {
+  /** Things they have grown to enjoy: done three times and rated highly. One tree each. */
+  trees: { activity_id: string; title: string; family: Family }[]
+  /** Missions they kept a memory of (a note or a photo). */
+  keepsakes: number
+  /** Missions done with other people. */
+  social_tokens: number
+  /** Honest check-ins: it did not happen, and they said so. */
+  seeds: number
+  /** Patterns the assistant guessed that the person confirmed as true for them. */
+  lessons: number
 }
 
 const MAX_FLOWERS = 60
@@ -263,7 +326,8 @@ function shiftDate(date: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-export function computeMeadow(events: MeadowEvent[], today: string): MeadowSummary {
+/** `lessons` = how many learned patterns the person has confirmed (kept in their profile, not derived from missions). */
+export function computeMeadow(events: MeadowEvent[], today: string, lessons = 0): MeadowSummary {
   const { milestones, totals } = walkMilestones(events)
   const credited = chronological(events).filter(isCredited)
 
@@ -306,6 +370,13 @@ export function computeMeadow(events: MeadowEvent[], today: string): MeadowSumma
     milestones,
     next,
     favourite,
+    garden: {
+      trees: [...totals.trees].sort().map((id) => ({ activity_id: id, title: getActivity(id)?.title ?? id, family: getActivity(id)?.family ?? 'movement' })),
+      keepsakes: totals.keepsakes,
+      social_tokens: totals.social,
+      seeds: totals.seeds,
+      lessons: Math.max(0, Math.round(lessons)),
+    },
   }
 }
 

@@ -25,6 +25,8 @@ function newestFirst(history: HistoryEvent[]): HistoryEvent[] {
 export function chooseMode(history: HistoryEvent[], mood: Mood): { mode: ActivityMode; cause?: ModeCause } {
   const lastTwo = newestFirst(history).slice(0, 2)
   if (lastTwo.length === 2 && lastTwo.every((e) => e.outcome === 'skipped')) return { mode: 'minimum', cause: 'recovery' }
+  // The last answer said getting started was the hard part: make the next beginning tiny.
+  if (lastTwo[0] && (lastTwo[0].skip_reason === 'couldnt_start' || lastTwo[0].barrier === 'couldnt_start')) return { mode: 'minimum', cause: 'hard_start' }
   if (mood === 'low') return { mode: 'minimum', cause: 'low_energy' }
   if (
     mood === 'high' &&

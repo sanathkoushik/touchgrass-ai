@@ -1,9 +1,18 @@
 import { z } from 'zod'
 import { locationSchema, type ConditionsSummary } from './context'
-import type { MeadowSummary, RewardSummary } from './meadow'
+import { getActivity } from './engine/activities'
+import type { LearnedItem } from './learned'
+import type { MeadowSummary, Milestone, RewardSummary } from './meadow'
+import { NOTE_MAX, type MemoryItem, type MissionRecord } from './mission-record'
+import type { FlowStat, ValueMetrics } from './metrics'
+import type { NextStep, PlanPrefill } from './next-step'
 import {
   ACTIVITY_MODES,
+  DESIRED_OUTCOMES,
+  FEELINGS,
   GOALS,
+  HELPERS,
+  WOULD_REPEAT,
   AVOIDANCES,
   EQUIPMENT,
   MOODS,
@@ -49,6 +58,12 @@ export const preferencesSchema = z.strictObject({
 const goalList = uniq(z.enum(GOALS))
 const windowList = z.array(timeWindow).max(4)
 
+/** A list of real activity ids (the person's "never suggest this" list). */
+const activityIdList = z
+  .array(z.string().refine((id) => getActivity(id) !== undefined, 'unknown activity'))
+  .max(40)
+  .transform((xs) => [...new Set(xs)])
+
 export const profileInputSchema = z.strictObject({
   preferences: preferencesSchema,
   motivators: uniq(z.enum(MOTIVATORS)),
@@ -57,6 +72,8 @@ export const profileInputSchema = z.strictObject({
   /** Optional: what the person wants out of this. Older profiles simply have none. */
   goals: goalList.default([]),
   best_windows: windowList.default([]),
+  /** Activities they asked never to see again. Optional: saving preferences keeps what is already there. */
+  avoid_activities: activityIdList.optional(),
 })
 export type ProfileInput = z.infer<typeof profileInputSchema>
 
@@ -67,13 +84,25 @@ export const profilePatchSchema = z.strictObject({
   equipment: profileInputSchema.shape.equipment.optional(),
   goals: goalList.optional(),
   best_windows: windowList.optional(),
+  avoid_activities: activityIdList.optional(),
 })
 export type ProfilePatch = z.infer<typeof profilePatchSchema>
 
 /** What we store and return: the engine's profile plus schedule hints. */
+/** The person's say over what the assistant has learned. Stored with the profile; the patterns themselves are recomputed. */
+export interface LearningControls {
+  /** Pattern ids they said are not true for them: never used, never shown again until restored. */
+  dismissed: string[]
+  /** Patterns they confirmed, with the wording and day they confirmed it (they become "lessons" in the meadow). */
+  confirmed: { id: string; text: string; at: string }[]
+  /** Answers before this moment (UTC) are ignored by learning: "start again from scratch". */
+  reset_at?: string
+}
+
 export interface StoredProfile extends Omit<UserProfile, 'user_id'> {
   schedule_signals: { best_windows: string[] }
   updated_at: string
+  learning?: LearningControls
 }
 
 export interface ProfileStats {
@@ -87,7 +116,11 @@ export interface ProfileStats {
 export interface ProfileResponse {
   profile: StoredProfile
   stats: ProfileStats
+  /** Which flow this person has: the Mission Companion (everyone, unless an experiment is switched on) or the earlier plain one. */
+  flow: Flow
 }
+
+export type Flow = 'companion' | 'classic'
 
 /** GET /api/profile: "no profile yet" is a normal 200 answer (so a first visit logs no error), not a 404. */
 export type ProfileLookupResponse = ProfileResponse | { profile: null }
@@ -117,6 +150,8 @@ export const recommendInputSchema = z.strictObject({
    * database outage still gives a real recommendation (without history, and without saving it).
    */
   fallback_profile: profileInputSchema.optional(),
+  /** What they want out of this one (the check-in). Optional: asking is adaptive. */
+  desired_outcome: z.enum(DESIRED_OUTCOMES).optional(),
 })
 export type RecommendInput = z.input<typeof recommendInputSchema>
 
@@ -126,6 +161,8 @@ export interface RecommendResponse extends Recommendation {
   persisted: boolean
   /** The live conditions this recommendation was made with. Absent when no location was given or weather was unavailable. */
   context?: ConditionsSummary
+  /** Which flow this person has. */
+  flow?: Flow
 }
 
 // ----------------------------------------------------------------- upgrade
@@ -154,12 +191,32 @@ export const feedbackInputSchema = z
     skip_reason: z.enum(SKIP_REASONS).optional(),
     /** Minutes away from the app (measured from "Let's go" to "I am back", or what the person said). */
     minutes_outside: z.int().min(0).max(480).optional(),
-    /** How many of the mission's side quests were ticked off. */
+    /** Whether they tried the optional prompt (1) or not (0). */
     quests_done: z.int().min(0).max(3).optional(),
+    /** How they feel now compared with before. */
+    feeling: z.enum(FEELINGS).optional(),
+    /** What made it easier. */
+    helper: z.enum(HELPERS).optional(),
+    /** What made it harder (same vocabulary as skip reasons). */
+    barrier: z.enum(SKIP_REASONS).optional(),
+    would_repeat: z.enum(WOULD_REPEAT).optional(),
+    /** Their own words: the memory. Plain text only. */
+    note: z
+      .string()
+      .trim()
+      .max(NOTE_MAX)
+      .refine((t) => !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(t), 'control characters are not allowed')
+      .optional(),
+    /** True if they kept a photo. It stays on their device; only this flag comes to us. */
+    has_photo: z.boolean().optional(),
+    /** Were the minutes measured by the app, or typed in by the person? */
+    minutes_source: z.enum(['measured', 'stated']).optional(),
+    /** When they set off (ISO, from their device). */
+    started_at: z.iso.datetime({ offset: true }).optional(),
   })
   .superRefine((v, ctx) => {
     const credited = v.outcome === 'completed' || v.outcome === 'partial'
-    for (const key of ['minutes_outside', 'quests_done'] as const) {
+    for (const key of ['minutes_outside', 'quests_done', 'feeling', 'helper', 'barrier', 'would_repeat', 'note', 'has_photo', 'minutes_source', 'started_at'] as const) {
       if (v[key] !== undefined && !credited) ctx.addIssue({ code: 'custom', path: [key], message: `${key} only applies to completed or partial` })
     }
     if (v.enjoyment !== undefined && v.outcome !== 'completed' && v.outcome !== 'partial') {
@@ -178,6 +235,14 @@ export interface FeedbackResponse {
   skip_reason: SkipReason | null
   /** Present for completed or partial missions: what this one added to the meadow. */
   reward?: RewardSummary
+  /** Plain sentences saying what will be done differently because of these answers. */
+  adaptations: string[]
+  /** When it did not happen: honesty is recognised (a seed in the meadow). It adds no time, and nothing is taken away. */
+  recognition?: { seeds: number; new_milestones: Milestone[] }
+  /** When it did not happen: a smaller next step to try, never a dead end. */
+  next_step?: NextStep
+  /** When they said they would not repeat it: offer to stop suggesting it altogether. */
+  ask_to_avoid?: { activity_id: string; title: string }
 }
 
 // ---------------------------------------------------------------- meadow
@@ -217,4 +282,76 @@ export interface ApiErrorBody {
     message: string
     details?: { path: string; message: string }[]
   }
+}
+
+// ------------------------------------------------------- what was learned
+
+export const learnedRespondSchema = z.strictObject({
+  id: z.string().min(3).max(80),
+  action: z.enum(['confirm', 'dismiss', 'restore']),
+})
+
+export interface LearnedView extends LearnedItem {
+  /** What the person has done with it: nothing yet, confirmed it, or said it is not true. */
+  status: 'active' | 'confirmed' | 'dismissed'
+}
+
+export interface LearnedResponse {
+  items: LearnedView[]
+  /** Patterns the person confirmed (kept even if the answers change). */
+  lessons: { id: string; text: string; at: string }[]
+  /** Activities they asked never to see again. */
+  avoid: { activity_id: string; title: string }[]
+  /** When they last started learning from scratch, if ever. */
+  reset_at: string | null
+  /** What this is, how it is used, and what they can do about it. */
+  explanation: string
+  /** Something kind the assistant noticed that fits right now, with a one-tap way to try it. */
+  suggestion: { text: string; plan: PlanPrefill } | null
+}
+
+// ------------------------------------------------------------ memories
+
+export const memoriesQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(200).default(60) })
+
+/** Correct or remove a memory: any field set to null is cleared. */
+export const memoryPatchSchema = z
+  .strictObject({
+    note: z
+      .string()
+      .trim()
+      .max(NOTE_MAX)
+      .refine((t) => !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(t), 'control characters are not allowed')
+      .nullable()
+      .optional(),
+    feeling: z.enum(FEELINGS).nullable().optional(),
+    would_repeat: z.enum(WOULD_REPEAT).nullable().optional(),
+    has_photo: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, 'nothing to change')
+
+export interface MemoriesResponse {
+  items: MemoryItem[]
+}
+
+export interface MemoryResponse {
+  item: MemoryItem
+}
+
+// ------------------------------------------------------------- records, metrics
+
+export interface MissionsResponse {
+  records: MissionRecord[]
+}
+
+export interface MetricsResponse {
+  metrics: ValueMetrics
+  /** Plain-language lines that the numbers support. */
+  lines: string[]
+}
+
+export interface ExperimentResponse {
+  /** Percent of people in the plain (classic) arm. 0 means everyone has the Mission Companion. */
+  classic_percent: number
+  arms: FlowStat[]
 }

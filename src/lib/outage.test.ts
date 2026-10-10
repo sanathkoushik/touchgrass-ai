@@ -31,6 +31,7 @@ const REC = {
   source: 'deterministic',
   mode: 'normal',
   preparation: [],
+  companion: { note: 'n', steps: [], tiny_start: { minutes: 2, text: 't' }, alternative: null },
   persisted: false,
 }
 

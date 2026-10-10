@@ -16,6 +16,7 @@ export function remainingText(m: Milestone): string | null {
     variety: plural(left, 'more different activity', 'more different activities'),
     quester: plural(left, 'more side quest', 'more side quests'),
     loved_it: plural(left, 'more 5 out of 5', 'more 5 out of 5s'),
+    honest_checkins: plural(left, 'more honest check-in', 'more honest check-ins'),
   }
   const u = unit[m.id]
   return u ? `${u} to go` : null

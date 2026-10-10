@@ -1,7 +1,9 @@
 import { ACTIVITIES, GUARANTEED_FALLBACK_ID, getActivity } from './activities'
+import { buildCompanion } from './companion'
 import { filterActivities } from './filter'
 import { scoreActivities } from './score'
 import type {
+  DesiredOutcome,
   ActivityMode,
   Bundle,
   Equipment,
@@ -98,7 +100,12 @@ export function evidenceFacts(scored: ScoredActivity, ctx: Context): string[] {
   // 1. The adaptation itself: why THIS size, and what it fixes from last time. These are the learning the person can see.
   const modeFact = modeSentence(ctx)
   if (modeFact) parts.push(modeFact)
-  if (evidence.addresses_skip && SKIP_FIX[evidence.addresses_skip]) parts.push(SKIP_FIX[evidence.addresses_skip])
+  if (evidence.addresses_skip && SKIP_FIX[evidence.addresses_skip]) {
+    // "Too tired" is answered by something that can be done sitting down, when it can.
+    parts.push(evidence.addresses_skip === 'too_tired' && activity.tags.includes('seated') ? 'You said the last one wore you out; this one can be done sitting down.' : SKIP_FIX[evidence.addresses_skip])
+  }
+  if (evidence.outcome_fit && ctx.desired_outcome) parts.push(OUTCOME_FACT[ctx.desired_outcome])
+  if (evidence.learned_text) parts.push(evidence.learned_text)
   if (evidence.observed_enjoyment_avg !== null && evidence.observed_enjoyment_avg >= 4) {
     parts.push(`You rated this ${evidence.observed_enjoyment_avg} out of 5 before.`)
   }
@@ -125,6 +132,13 @@ export function evidenceFacts(scored: ScoredActivity, ctx: Context): string[] {
   return parts
 }
 
+const OUTCOME_FACT: Record<DesiredOutcome, string> = {
+  clear_head: 'You wanted to clear your head; this one is calm and quiet.',
+  energise: 'You wanted to feel more energetic; this one gets you moving.',
+  break_routine: 'You wanted to break the routine; this one is a change from the usual.',
+  connect: 'You wanted to feel connected; this one is better with other people.',
+}
+
 const SKIP_FIX: Record<SkipReason, string> = {
   too_far: 'You said the last one was too far; this needs no travel.',
   too_tired: 'You said the last one wore you out; this one is gentle.',
@@ -133,6 +147,7 @@ const SKIP_FIX: Record<SkipReason, string> = {
   too_costly: 'You said the last one cost too much; this one is free.',
   no_friend: 'You had no one to join the last one; this works on your own.',
   boring: '',
+  couldnt_start: 'You found the last one hard to start; this one is small and easy to begin.',
   other: '',
 }
 
@@ -154,6 +169,8 @@ function modeSentence(ctx: Context): string | null {
       return 'Kept short and easy for a low-energy moment.'
     case 'momentum':
       return 'Your last two went well, so this one stretches a little.'
+    case 'hard_start':
+      return 'Last time, starting was the hard part, so this one begins with just two minutes.'
     case 'chosen':
       return ctx.mode === 'minimum' ? 'You asked for a small start.' : ctx.mode === 'excellent' ? 'You asked for a bigger one.' : null
     default:
@@ -237,6 +254,7 @@ export function buildRecommendation(
     title: primary.activity.title,
     duration_min: planDuration(primary.activity, ctx),
     mode: (ctx.mode ?? 'normal') satisfies ActivityMode,
+    companion: buildCompanion(primary.activity, ctx, planDuration(primary.activity, ctx)),
     preparation: preparationFor(primary.activity),
     reason: overrides.reason ?? explain(primary, ctx),
     first_step: overrides.firstStep ?? primary.activity.firstStep,

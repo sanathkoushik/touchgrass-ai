@@ -2,6 +2,7 @@ import { getActivity } from './activities'
 import { matchingTerm, termsMatch } from './filter'
 import { effectiveMood } from './modes'
 import type {
+  DesiredOutcome,
   Activity,
   Goal,
   SkipReason,
@@ -22,6 +23,8 @@ export const WEIGHTS: Record<ScoreComponent, number> = {
   duration_fit: 0.8,
   friction: 1.5,
   mood_fit: 0.8,
+  outcome_fit: 1.2,
+  learned: 1.0,
 }
 
 /** Neutral completion rate used when there is no stated preference and no data. */
@@ -268,6 +271,10 @@ function frictionComponent(activity: Activity, recent: HistoryEvent[]): number {
       case 'boring':
         p = sameActivity ? 0.5 : 0
         break
+      case 'couldnt_start':
+        // Hard to begin: long, intense or far things are the ones that stay hard to begin.
+        p = (activity.duration.default > 30 ? 0.25 : 0) + (activity.intensity - 1) * 0.1 + (activity.travel === 'far' ? 0.15 : 0)
+        break
       case 'other':
         p = sameActivity ? 0.1 : 0
         break
@@ -300,10 +307,132 @@ function addressedSkip(activity: Activity, recent: HistoryEvent[]): SkipReason |
       bad_weather: activity.weather === 'any',
       too_costly: activity.cost === 'free',
       no_friend: !activity.needsOthers,
+      couldnt_start: activity.duration.default <= 15,
     }
     return fixes[e.skip_reason] ? e.skip_reason : null // only the MOST RECENT reason is considered
   }
   return null
+}
+
+/** Which part of the day an hour belongs to (the same split the learner uses for "evenings have been harder"). */
+export function partOfHour(hour: number): 'mornings' | 'afternoons' | 'evenings' | 'late nights' {
+  if (hour >= 5 && hour < 12) return 'mornings'
+  if (hour >= 12 && hour < 17) return 'afternoons'
+  if (hour >= 17 && hour < 22) return 'evenings'
+  return 'late nights'
+}
+
+const OBSERVATION = new Set(['photography', 'nature', 'mindfulness', 'stargazing', 'exploring', 'sketching', 'art', 'park', 'scavenger', 'sunset', 'waterfront'])
+const MOVING = new Set(['cardio', 'sport', 'strength', 'running', 'cycling', 'swimming', 'workout', 'dance'])
+const hasAny = (a: Activity, tags: Set<string>) => a.tags.some((t) => tags.has(t))
+
+/**
+ * How well an activity serves what the person said they want from THIS mission (clear my head, feel more energetic,
+ * break the routine, feel connected). Only applies when they named one; "matched" is set only for a genuine fit, so the
+ * explanation can truthfully say so.
+ */
+function outcomeComponent(activity: Activity, ctx: Context): { value: number; matched: DesiredOutcome | null } {
+  const goal = ctx.desired_outcome
+  if (!goal) return { value: 0, matched: null }
+  let v = 0
+  switch (goal) {
+    case 'clear_head':
+      v = (activity.motivators.includes('calm') ? 0.4 : 0) + (activity.intensity === 1 ? 0.2 : -0.3 * (activity.intensity - 1)) + (hasAny(activity, new Set(['mindfulness', 'nature', 'park', 'calm'])) ? 0.3 : 0)
+      break
+    case 'energise':
+      v = (activity.intensity >= 2 ? 0.4 + 0.2 * (activity.intensity - 2) : -0.2) + (activity.family === 'movement' ? 0.2 : 0)
+      break
+    case 'break_routine':
+      v = activity.novelty >= 3 ? 0.8 : activity.novelty === 2 ? 0.5 : -0.3
+      break
+    case 'connect': {
+      const withOthers = activity.social.includes('with_friend') || activity.social.includes('small_group')
+      v = (withOthers ? (ctx.social_available ? 0.6 : 0.1) : 0) + (activity.tags.some((t) => t === 'friends' || t === 'call' || t === 'talk') ? 0.3 : 0)
+      break
+    }
+  }
+  const value = clamp(v, -1, 1)
+  return { value, matched: value >= 0.5 ? goal : null }
+}
+
+/**
+ * Adjustments from what the assistant has LEARNED about the person (tentative patterns) and from their most recent
+ * single answers (small nudges, never defining). Strong patterns count a bit more than tentative ones. The text returned
+ * is the strongest reason this activity was helped, so the explanation can quote it.
+ */
+function learnedComponent(activity: Activity, ctx: Context, ordered: HistoryEvent[], own: HistoryEvent[]): { value: number; text: string | null } {
+  let total = 0
+  let best = { delta: 0, text: null as string | null }
+  const add = (delta: number, text?: string) => {
+    total += delta
+    if (text && delta > best.delta) best = { delta, text }
+  }
+  const part = partOfHour(ctx.hour)
+  const dur = activity.duration.default
+
+  for (const s of ctx.learned ?? []) {
+    const m = s.strength === 'consistent' ? 1.5 : 1
+    switch (s.kind) {
+      case 'enjoys_kind':
+        if (s.key === activity.family) add(0.35 * m, s.text)
+        break
+      case 'hard_time': {
+        const now = s.key === `part:${part}` || s.key === `day:${ctx.weekend ? 'weekend' : 'weekday'}`
+        if (!now) break
+        if (dur > 30) add(-0.35 * m)
+        else if (dur <= 15) add(0.15 * m, `${s.text.replace(/\.$/, '')}, so this one is short.`)
+        break
+      }
+      case 'duration_fit':
+        if (s.key === 'short') (dur <= 20 ? add(0.3 * m, s.text) : dur > 40 ? add(-0.25 * m) : 0)
+        else if (dur > 40) add(0.25 * m, s.text)
+        break
+      case 'barrier': {
+        const helped =
+          (s.key === 'couldnt_start' && dur <= 15) ||
+          (s.key === 'too_tired' && (activity.tags.includes('seated') || activity.intensity === 1)) ||
+          (s.key === 'no_time' && dur <= 20) ||
+          (s.key === 'too_far' && activity.travel === 'none') ||
+          (s.key === 'bad_weather' && activity.weather === 'any') ||
+          (s.key === 'boring' && activity.novelty >= 2) ||
+          (s.key === 'no_friend' && !activity.needsOthers) ||
+          (s.key === 'too_costly' && activity.cost === 'free')
+        if (helped) add(0.25 * m, s.text.replace(/\.$/, '') + ', so this one is easier.')
+        break
+      }
+      case 'appeal':
+        if (s.key === 'novelty') activity.novelty >= 2 ? add(0.3 * m, s.text) : add(-0.1 * m)
+        else if (s.key === 'familiar') activity.novelty === 1 ? add(0.25 * m, s.text) : add(-0.1 * m)
+        else if (s.key === 'company' && ctx.social_available && (activity.social.includes('with_friend') || activity.social.includes('small_group'))) add(0.3 * m, s.text)
+        else if (s.key === 'solitude' && !activity.needsOthers && activity.social.includes('solo')) add(0.25 * m, s.text)
+        else if (s.key === 'observation' && hasAny(activity, OBSERVATION) && !hasAny(activity, MOVING)) add(0.3 * m, s.text)
+        else if (s.key === 'movement' && hasAny(activity, MOVING)) add(0.3 * m, s.text)
+        else if (s.key === 'energising' && activity.intensity >= 2) add(0.25 * m, s.text)
+        break
+      case 'calming':
+        if ((activity.motivators.includes('calm') || activity.tags.includes('mindfulness')) && activity.intensity === 1) add(0.35 * m, s.text)
+        break
+      case 'repetitive':
+      case 'skipped_often':
+        if (s.key === activity.id) add(-0.5 * m)
+        break
+      case 'no_change':
+        if (s.key === activity.id) add(-0.35 * m)
+        break
+    }
+  }
+
+  // Single answers: small nudges. One answer is a hint, never a verdict.
+  const lastRepeat = own.find((e) => e.would_repeat)?.would_repeat // own is newest-first
+  if (lastRepeat === 'no') add(-0.6)
+  else if (lastRepeat === 'yes') add(0.15)
+  if (own.find((e) => e.feeling)?.feeling === 'same') add(-0.25)
+  const recent = ordered.slice(0, 2)
+  if (recent.some((e) => e.feeling === 'more_tired') && activity.intensity >= 2) add(-0.2)
+  if (recent.some((e) => e.skip_reason === 'too_tired') && activity.tags.includes('seated')) add(0.4)
+  if (recent.some((e) => e.skip_reason === 'couldnt_start' || e.barrier === 'couldnt_start') && dur <= 15) add(0.2)
+
+  return { value: clamp(total, -1, 1), text: best.text }
 }
 
 /** Scores every candidate. Pure and deterministic: ties are broken by activity id. */
@@ -322,6 +451,8 @@ export function scoreActivities(
     const peerStats = statsOf(peers)
 
     const pref = preferenceComponent(activity, profile, ownStats, peerStats)
+    const outcome = outcomeComponent(activity, ctx)
+    const learnedAdj = learnedComponent(activity, ctx, ordered, own)
     const nov = noveltyComponent(activity, profile, recent)
 
     const components: Record<ScoreComponent, number> = {
@@ -333,6 +464,8 @@ export function scoreActivities(
       duration_fit: durationComponent(activity, profile, ctx),
       friction: frictionComponent(activity, recent),
       mood_fit: moodComponent(activity, ctx),
+      outcome_fit: outcome.value,
+      learned: learnedAdj.value,
     }
 
     let score = 0
@@ -347,6 +480,8 @@ export function scoreActivities(
         observed_done: own.filter((e) => e.outcome === 'completed').length,
         declared_like: pref.like,
         declared_goal: pref.goal,
+        outcome_fit: outcome.matched,
+        learned_text: learnedAdj.text,
         ...enjoymentEvidence(own),
         addresses_skip: addressedSkip(activity, recent),
         recently_suggested: nov.recentlySuggested,

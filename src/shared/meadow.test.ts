@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ACTIVITIES } from './engine'
 import { MILESTONE_IDS, computeMeadow, creditedMinutes, formatMinutes, localDate, newMilestones, type MeadowEvent } from './meadow'
+import { PROMPTS, promptKind } from './engine/companion'
 import { ALL_QUESTS, QUESTS_PER_MISSION, questsFor } from './quests'
 
 // Synthetic events only. Real activity ids so families and default durations are the engine's own.
@@ -133,8 +134,9 @@ describe('milestones: earned once, kept forever', () => {
     for (let i = 0; i < 60; i++) {
       const day = 1 + (i % 28)
       const date = `2026-0${1 + Math.floor(i / 28) * 3}-${String(day).padStart(2, '0')}`
-      rich.push(at(date, i % 2 ? 7 : 18, ids[i % ids.length], { planned_min: 45, minutes_outside: 45, enjoyment: 5, quests_done: 2 }))
+      rich.push(at(date, i % 2 ? 7 : 18, ids[i % ids.length], { planned_min: 45, minutes_outside: 45, enjoyment: 5, quests_done: 2, has_note: i % 5 === 0, social_mode: i % 4 === 0 ? 'with_friend' : 'solo' }))
     }
+    for (let i = 0; i < 4; i++) rich.push(at(`2026-0${2 + i}-0${3 + i}`, 12, 'easy_jog', { outcome: i % 2 ? 'changed' : 'skipped' }))
     expect(earned(rich).sort()).toEqual([...MILESTONE_IDS].sort())
   })
 
@@ -222,35 +224,123 @@ describe('helpers', () => {
   })
 })
 
-describe('side quests', () => {
+describe('the prompt for while out (one, activity-specific, optional)', () => {
   const mission = (i: number) => `r_00000000-0000-4000-8000-${String(i).padStart(12, '0')}`
 
-  it('gives the same two quests for the same mission, every time (works after a reload or offline)', () => {
+  it('gives exactly one prompt, the same one every time for the same mission (works after a reload or offline)', () => {
+    expect(questsFor('brisk_walk_loop', mission(1))).toHaveLength(QUESTS_PER_MISSION)
+    expect(QUESTS_PER_MISSION).toBe(1)
     expect(questsFor('brisk_walk_loop', mission(1))).toEqual(questsFor('brisk_walk_loop', mission(1)))
   })
 
-  it('gives two different quests, drawn from the real bank', () => {
-    for (let i = 0; i < 200; i++) {
-      const q = questsFor('new_street_walk', mission(i))
-      expect(q).toHaveLength(QUESTS_PER_MISSION)
-      expect(new Set(q).size).toBe(QUESTS_PER_MISSION)
-      for (const text of q) expect(ALL_QUESTS).toContain(text)
-    }
+  it("is in the style of the activity: walking, exploring, social and calm each get their own kind of prompt", () => {
+    expect(PROMPTS.walk).toContain(questsFor('brisk_walk_loop', mission(7))[0])
+    expect(PROMPTS.explore).toContain(questsFor('new_street_walk', mission(7))[0])
+    expect(PROMPTS.social).toContain(questsFor('walk_and_talk', mission(7))[0])
+    expect(PROMPTS.calm).toContain(questsFor('quiet_reset', mission(7))[0])
+    expect(PROMPTS.creative).toContain(questsFor('outdoor_sketching', mission(7))[0])
+  })
+
+  it("uses the document's own examples as the first prompt of each of its four kinds", () => {
+    expect(PROMPTS.walk[0]).toBe("Notice one thing along your route that you haven't paid attention to before.")
+    expect(PROMPTS.explore[0]).toBe('Find an interesting detail in your surroundings.')
+    expect(PROMPTS.social[0]).toBe("Ask someone a question you wouldn't normally ask, if that feels comfortable.")
+    expect(PROMPTS.calm[0]).toBe('Notice three things you can see or hear.')
+  })
+
+  it('every activity has a kind, and every kind has three prompts', () => {
+    for (const a of ACTIVITIES) expect(PROMPTS[promptKind(a.id)], a.id).toHaveLength(3)
+    for (const [kind, bank] of Object.entries(PROMPTS)) expect(new Set(bank).size, kind).toBe(3)
   })
 
   it('varies between missions, so it does not feel repeated', () => {
-    const distinct = new Set(Array.from({ length: 100 }, (_, i) => questsFor('brisk_walk_loop', mission(i)).join('|')))
-    expect(distinct.size).toBeGreaterThan(10)
+    const seen = new Set(Array.from({ length: 100 }, (_, i) => questsFor('brisk_walk_loop', mission(i))[0]))
+    expect(seen.size).toBe(3)
   })
 
-  it('matches the style of the activity, and copes with unknown ones', () => {
-    expect(questsFor('no_such_activity', mission(1))).toHaveLength(QUESTS_PER_MISSION)
+  it('copes with an unknown activity', () => {
+    expect(questsFor('no_such_activity', mission(1))).toHaveLength(1)
   })
 
-  it('is safe: short, plain, no links, no money, no strangers to approach', () => {
+  it('is safe: short, plain, no links, no money, nothing risky, nobody forced', () => {
     for (const q of ALL_QUESTS) {
       expect(q.length, q).toBeLessThan(120)
-      expect(q, q).not.toMatch(/https?:|www\.|\$|buy|pay|stranger|climb|swim|cross the road|trespass/i)
+      expect(q, q).not.toMatch(/https?:|www\.|\$|buy|pay |stranger|climb|swim|cross the road|trespass|must|have to/i)
+    }
+    expect(ALL_QUESTS).toHaveLength(24)
+  })
+})
+
+describe('the memory garden', () => {
+  it('honest check-ins are recognised, add no time, and never count as missions', () => {
+    const events = [at('2026-10-01', 12, 'brisk_walk_loop', { planned_min: 30, minutes_outside: 30 }), at('2026-10-02', 12, 'easy_jog', { outcome: 'skipped' }), at('2026-10-03', 12, 'easy_jog', { outcome: 'changed' })]
+    const s = computeMeadow(events, TODAY)
+    expect(s.garden.seeds).toBe(2)
+    expect(s.total_minutes).toBe(30)
+    expect(s.missions).toBe(1)
+    expect(s.milestones.find((m) => m.id === 'honest_checkins')!.earned).toBe(false)
+    expect(s.milestones.find((m) => m.id === 'honest_checkins')!.progress).toEqual({ current: 2, target: 3 })
+  })
+
+  it('earns the honest-check-ins milestone on the third honest answer, with that answer\'s moment', () => {
+    const events = ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'].map((d) => at(d, 9, 'easy_jog', { outcome: 'skipped' }))
+    const m = computeMeadow(events, TODAY).milestones.find((x) => x.id === 'honest_checkins')!
+    expect(m.earned).toBe(true)
+    expect(m.earned_at).toBe('2026-10-03T09:00:00+05:30')
+  })
+
+  it('does not count unanswered missions as honest check-ins', () => {
+    expect(computeMeadow([at('2026-10-01', 9, 'easy_jog', { outcome: 'pending' })], TODAY).garden.seeds).toBe(0)
+  })
+
+  it('keeps a keepsake for each mission with a note or a photo (only for missions that happened)', () => {
+    const s = computeMeadow(
+      [at('2026-10-01', 12, 'brisk_walk_loop', { has_note: true }), at('2026-10-02', 12, 'brisk_walk_loop', { has_photo: true }), at('2026-10-03', 12, 'brisk_walk_loop'), at('2026-10-04', 12, 'easy_jog', { outcome: 'skipped', has_note: true })],
+      TODAY,
+    )
+    expect(s.garden.keepsakes).toBe(2)
+    expect(s.milestones.find((m) => m.id === 'memory_keeper')!.earned_at).toBe('2026-10-01T12:00:00+05:30')
+  })
+
+  it('gives a token for missions done with other people, not for solo ones or ones that did not happen', () => {
+    const s = computeMeadow(
+      [at('2026-10-01', 12, 'walk_and_talk', { social_mode: 'with_friend' }), at('2026-10-02', 12, 'cards_outside', { social_mode: 'small_group' }), at('2026-10-03', 12, 'brisk_walk_loop', { social_mode: 'solo' }), at('2026-10-04', 12, 'walk_and_talk', { social_mode: 'with_friend', outcome: 'skipped' })],
+      TODAY,
+    )
+    expect(s.garden.social_tokens).toBe(2)
+    expect(s.milestones.find((m) => m.id === 'connected')!.earned).toBe(true)
+  })
+
+  it('grows a tree only for something done three times and rated well (rated at least twice, averaging 4 or more)', () => {
+    const tree = (ratings: (number | undefined)[]) =>
+      computeMeadow(ratings.map((enjoyment, i) => at(`2026-10-0${i + 1}`, 12, 'brisk_walk_loop', enjoyment === undefined ? {} : { enjoyment })), TODAY).garden.trees.map((t) => t.activity_id)
+    expect(tree([5, 4, 5])).toEqual(['brisk_walk_loop'])
+    expect(tree([5, 4])).toEqual([]) // only twice
+    expect(tree([5, undefined, undefined])).toEqual([]) // one rating is not enough
+    expect(tree([4, 3, 3])).toEqual([]) // average 3.3
+    const m = computeMeadow([5, 4, 5].map((enjoyment, i) => at(`2026-10-0${i + 1}`, 12, 'brisk_walk_loop', { enjoyment })), TODAY).milestones.find((x) => x.id === 'grown_to_enjoy')!
+    expect(m.earned_at).toBe('2026-10-03T12:00:00+05:30')
+    expect(computeMeadow([5, 4, 5].map((enjoyment, i) => at(`2026-10-0${i + 1}`, 12, 'brisk_walk_loop', { enjoyment })), TODAY).garden.trees[0]).toMatchObject({ title: 'Brisk walk, one familiar loop', family: 'movement' })
+  })
+
+  it('carries the lessons the person confirmed (never negative)', () => {
+    expect(computeMeadow([], TODAY, 3).garden.lessons).toBe(3)
+    expect(computeMeadow([], TODAY, -2).garden.lessons).toBe(0)
+    expect(computeMeadow([], TODAY).garden.lessons).toBe(0)
+  })
+
+  it('an empty garden is just an empty garden', () => {
+    expect(computeMeadow([], TODAY).garden).toEqual({ trees: [], keepsakes: 0, social_tokens: 0, seeds: 0, lessons: 0 })
+  })
+
+  it('never loses anything when more is added (the garden only grows)', () => {
+    const base = [at('2026-10-01', 12, 'brisk_walk_loop', { enjoyment: 5, has_note: true, social_mode: 'with_friend' }), at('2026-10-02', 12, 'easy_jog', { outcome: 'skipped' })]
+    const before = computeMeadow(base, TODAY).garden
+    for (const extra of [at('2026-10-03', 12, 'easy_jog', { outcome: 'skipped' }), at('2026-10-03', 12, 'easy_jog', { outcome: 'pending' }), at('2026-10-03', 12, 'brisk_walk_loop', { minutes_outside: 1 })]) {
+      const after = computeMeadow([...base, extra], TODAY).garden
+      expect(after.keepsakes).toBeGreaterThanOrEqual(before.keepsakes)
+      expect(after.social_tokens).toBeGreaterThanOrEqual(before.social_tokens)
+      expect(after.seeds).toBeGreaterThanOrEqual(before.seeds)
     }
   })
 })
