@@ -1,18 +1,23 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Check, Minus, Shuffle, SkipForward } from 'lucide-react'
-import type { ProfileStats } from '@/shared/api'
-import type { Outcome, SkipReason } from '@/shared/engine/types'
-import type { RewardSummary } from '@/shared/meadow'
+import type { FeedbackResponse, ProfileStats } from '@/shared/api'
+import type { Feeling, Helper, Outcome, SkipReason, WouldRepeat } from '@/shared/engine/types'
+import type { PlanPrefill } from '@/shared/next-step'
 import { questsFor } from '@/shared/quests'
 import { Celebration } from '@/components/tg/Celebration'
 import { ChoiceGroup } from '@/components/tg/ChoiceGroup'
 import { FeedbackButton } from '@/components/tg/FeedbackButton'
+import { MemoryNote } from '@/components/tg/MemoryNote'
 import { PreferenceChip } from '@/components/tg/PreferenceChip'
 import { PrimaryAction } from '@/components/tg/PrimaryAction'
+import { RecognitionCard } from '@/components/tg/RecognitionCard'
+import { ReflectionQuestions } from '@/components/tg/ReflectionQuestions'
 import { Button } from '@/components/ui/button'
 import { ApiError, getHistory, getProfile, sendFeedback } from '@/lib/api'
 import { clearMission, loadMission, minutesAway } from '@/lib/mission-store'
+import { queueNextPlan } from '@/lib/next-plan'
+import { keepPhoto } from '@/lib/photos'
 import { cn } from '@/lib/utils'
 import { SKIP_REASON_LABELS } from '@/lib/vocab'
 
@@ -25,8 +30,12 @@ interface Target {
   firstStep?: string
   /** Minutes since they tapped "Let's go", if we know. */
   measured: number | null
+  /** When they set off (epoch ms), if we know. */
+  wentAt?: number
   /** The side quests they ticked while out. */
   questsTicked: boolean[]
+  /** The Mission Companion or the earlier plain flow (the experiment switch). */
+  classic: boolean
 }
 
 const OUTCOMES: { value: Outcome; label: string; icon: typeof Check }[] = [
@@ -55,8 +64,11 @@ const STANDARD_MINUTES = [10, 15, 20, 30, 45, 60, 90, 120]
 /** Beyond this, "minutes since you set off" is probably a phone left on a shelf, so we ask instead of assuming. */
 const MAX_BELIEVABLE_MINUTES = 300
 
+/** The measured time, if it is believable. */
+const usableMeasured = (m: number | null) => (m !== null && m >= 1 && m <= MAX_BELIEVABLE_MINUTES ? m : null)
+
 function minuteOptions(measured: number | null) {
-  const usable = measured !== null && measured >= 1 && measured <= MAX_BELIEVABLE_MINUTES ? measured : null
+  const usable = usableMeasured(measured)
   const list = usable !== null ? [...new Set([usable, ...STANDARD_MINUTES])].sort((a, b) => a - b) : STANDARD_MINUTES
   return list.map((value) => ({
     value,
@@ -65,7 +77,14 @@ function minuteOptions(measured: number | null) {
   }))
 }
 
-type Done = { outcome: Outcome; enjoyment: number | null; stats: ProfileStats | null; unsaved?: boolean; reward?: RewardSummary }
+type Done = {
+  outcome: Outcome
+  enjoyment: number | null
+  stats: ProfileStats | null
+  unsaved?: boolean
+  response?: FeedbackResponse
+  keptMemory: boolean
+}
 
 export default function Feedback() {
   const navigate = useNavigate()
@@ -79,18 +98,23 @@ export default function Feedback() {
           firstStep: m.recommendation.first_step,
           unsaved: m.recommendation.persisted === false,
           measured: minutesAway(m),
+          ...(m.wentAt ? { wentAt: m.wentAt } : {}),
           questsTicked: m.questsTicked ?? [],
+          classic: m.recommendation.flow === 'classic',
         }
       : 'loading'
   })
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   const [enjoyment, setEnjoyment] = useState<number | null>(null)
   const [reason, setReason] = useState<SkipReason | null>(null)
-  const [minutes, setMinutes] = useState<number | null>(() => {
-    const m = minutesAway(loadMission())
-    return m !== null && m >= 1 && m <= MAX_BELIEVABLE_MINUTES ? m : null
-  })
+  const [minutes, setMinutes] = useState<number | null>(() => usableMeasured(minutesAway(loadMission())))
   const [ticks, setTicks] = useState<boolean[]>(() => loadMission()?.questsTicked ?? [])
+  const [feeling, setFeeling] = useState<Feeling | null>(null)
+  const [helper, setHelper] = useState<Helper | null>(null)
+  const [barrier, setBarrier] = useState<SkipReason | null>(null)
+  const [wouldRepeat, setWouldRepeat] = useState<WouldRepeat | null>(null)
+  const [note, setNote] = useState('')
+  const [photo, setPhoto] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<Done | null>(null)
@@ -102,7 +126,7 @@ export default function Feedback() {
     getHistory(10, ac.signal)
       .then(({ items }) => {
         const pending = items.find((i) => i.outcome === 'pending')
-        setTarget(pending ? { id: pending.recommendation_id, activityId: pending.activity_id, title: pending.title, measured: null, questsTicked: [] } : null)
+        setTarget(pending ? { id: pending.recommendation_id, activityId: pending.activity_id, title: pending.title, measured: null, questsTicked: [], classic: false } : null)
       })
       .catch(() => {
         if (!ac.signal.aborted) setTarget(null)
@@ -126,36 +150,69 @@ export default function Feedback() {
     if (target.unsaved) {
       // Nothing to update on the server: be honest, and do not make the person retry something that cannot work.
       clearMission()
-      setDone({ outcome, enjoyment, stats: null, unsaved: true })
+      setDone({ outcome, enjoyment, stats: null, unsaved: true, keptMemory: false })
       return
     }
     const credited = outcome === 'completed' || outcome === 'partial'
     const quests = target.activityId ? questsFor(target.activityId, target.id) : []
     const questsDone = quests.filter((_, i) => ticks[i]).length
+    const reflect = credited && !target.classic
+
     try {
+      // The photo is kept on THIS device only; the server is told just whether one exists.
+      const hasPhoto = reflect && photo ? await keepPhoto(target.id, photo) : false
+      const cleanNote = note.trim()
+      const measured = usableMeasured(target.measured)
+
       const res = await sendFeedback({
         recommendation_id: target.id,
         outcome,
         ...(enjoyment && credited ? { enjoyment } : {}),
         ...(reason && (outcome === 'skipped' || outcome === 'changed') ? { skip_reason: reason } : {}),
-        ...(credited && minutes !== null ? { minutes_outside: minutes } : {}),
+        ...(credited && minutes !== null ? { minutes_outside: minutes, minutes_source: minutes === measured ? ('measured' as const) : ('stated' as const) } : {}),
         ...(credited ? { quests_done: questsDone } : {}),
+        ...(credited && target.wentAt ? { started_at: new Date(target.wentAt).toISOString() } : {}),
+        ...(reflect && feeling ? { feeling } : {}),
+        ...(reflect && helper ? { helper } : {}),
+        ...(reflect && barrier ? { barrier } : {}),
+        ...(reflect && wouldRepeat ? { would_repeat: wouldRepeat } : {}),
+        ...(reflect && cleanNote ? { note: cleanNote } : {}),
+        ...(hasPhoto ? { has_photo: true } : {}),
       })
       clearMission()
       // Real numbers only: what the server has actually recorded for this person.
       const stats = await getProfile()
         .then((p) => p?.stats ?? null)
         .catch(() => null)
-      setDone({ outcome, enjoyment: enjoyment && credited ? enjoyment : null, stats, ...(res.reward ? { reward: res.reward } : {}) })
+      setDone({ outcome, enjoyment: enjoyment && credited ? enjoyment : null, stats, response: res, keptMemory: !!cleanNote || hasPhoto })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save that. Please try again.')
       setSaving(false)
     }
   }
 
+  const tryNextStep = (plan: PlanPrefill) => {
+    queueNextPlan(plan)
+    navigate('/plan')
+  }
+
   if (done) {
-    if (done.reward && (done.outcome === 'completed' || done.outcome === 'partial')) {
-      return <Celebration outcome={done.outcome} enjoyment={done.enjoyment} reward={done.reward} onNext={() => navigate('/plan')} />
+    const res = done.response
+    if (res?.reward && (done.outcome === 'completed' || done.outcome === 'partial')) {
+      return (
+        <Celebration
+          outcome={done.outcome}
+          enjoyment={done.enjoyment}
+          reward={res.reward}
+          adaptations={res.adaptations}
+          askToAvoid={res.ask_to_avoid}
+          keptMemory={done.keptMemory}
+          onNext={() => navigate('/plan')}
+        />
+      )
+    }
+    if (res?.recognition && (done.outcome === 'skipped' || done.outcome === 'changed')) {
+      return <RecognitionCard outcome={done.outcome} recognition={res.recognition} nextStep={res.next_step} onTry={tryNextStep} onNext={() => navigate('/plan')} />
     }
     const s = done.stats
     return (
@@ -236,10 +293,25 @@ export default function Feedback() {
             <ChoiceGroup label="Time spent" options={minuteOptions(target.measured)} value={minutes ?? undefined} onChange={setMinutes} disabled={saving} />
           </div>
 
+          {!target.classic && (
+            <ReflectionQuestions
+              missionId={target.id}
+              feeling={feeling}
+              onFeeling={setFeeling}
+              helper={helper}
+              onHelper={setHelper}
+              barrier={barrier}
+              onBarrier={setBarrier}
+              wouldRepeat={wouldRepeat}
+              onWouldRepeat={setWouldRepeat}
+              disabled={saving}
+            />
+          )}
+
           {quests.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">
-                Did you find them? <span className="font-normal text-muted-foreground">(side quests, optional)</span>
+                Did you try the little prompt? <span className="font-normal text-muted-foreground">(optional)</span>
               </p>
               <ul className="space-y-2">
                 {quests.map((q, i) => (
@@ -294,6 +366,8 @@ export default function Feedback() {
               ))}
             </div>
           </div>
+
+          {!target.classic && <MemoryNote note={note} onNote={setNote} photo={photo} onPhoto={setPhoto} disabled={saving} />}
         </>
       )}
 
@@ -309,6 +383,7 @@ export default function Feedback() {
               </PreferenceChip>
             ))}
           </div>
+          <p className="text-sm text-muted-foreground">Whatever the reason, it is fine. We will suggest something smaller next.</p>
         </div>
       )}
 

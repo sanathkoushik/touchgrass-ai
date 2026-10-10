@@ -86,3 +86,56 @@ export function summarizeLearning(items: HistoryItem[]): string[] {
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+// ------------------------------------------------------------------ how tastes change over time
+
+export interface TastePeriod {
+  /** How many missions this describes. */
+  n: number
+  /** The kind they did most. */
+  family: Family
+  /** When they most often went. */
+  part: string
+}
+
+export interface TastesOverTime {
+  early: TastePeriod
+  recent: TastePeriod
+  /** True when something about their choices has clearly shifted. */
+  changed: boolean
+  /** One or two plain sentences. Never a verdict, never a label. */
+  lines: string[]
+}
+
+const mostCommon = <T,>(xs: T[]): T | null => {
+  const counts = new Map<T, number>()
+  for (const x of xs) counts.set(x, (counts.get(x) ?? 0) + 1)
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+}
+
+function describePeriod(items: HistoryItem[]): TastePeriod | null {
+  const family = mostCommon(items.map((i) => getActivity(i.activity_id)?.family).filter((f): f is Family => !!f))
+  const part = mostCommon(items.map((i) => partOf(i.timestamp)))
+  return family && part ? { n: items.length, family, part } : null
+}
+
+/**
+ * "Then and now": what they chose in their first third of missions compared with their latest third, so they can see
+ * how their preferences have moved. Needs at least 9 missions that happened (3 per third) and says nothing otherwise.
+ */
+export function tastesOverTime(items: HistoryItem[]): TastesOverTime | null {
+  const did = items.filter(done).sort((a, b) => (a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0))
+  if (did.length < 9) return null
+  const third = Math.floor(did.length / 3)
+  const early = describePeriod(did.slice(0, third))
+  const recent = describePeriod(did.slice(did.length - third))
+  if (!early || !recent) return null
+
+  const kindChanged = early.family !== recent.family
+  const partChanged = early.part !== recent.part
+  const lines: string[] = []
+  if (kindChanged) lines.push(`Early on you mostly did ${FAMILY_LABEL[early.family]} missions. Lately it has been ${FAMILY_LABEL[recent.family]}.`)
+  if (partChanged) lines.push(`You used to go out mostly in the ${early.part}. Lately it has been the ${recent.part}.`)
+  if (lines.length === 0) lines.push(`Your choices have stayed steady: mostly ${FAMILY_LABEL[recent.family]}, in the ${recent.part}.`)
+  return { early, recent, changed: kindChanged || partChanged, lines }
+}

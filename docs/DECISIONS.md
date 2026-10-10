@@ -175,3 +175,15 @@ What it is:
 Storage: migration 0003 adds `minutes_outside` and `quests_done` to events; the planned minutes are stored in the event context. Completed and partial missions are never pruned (the 180-day retention now only removes skipped, swapped and unanswered events), so the meadow cannot shrink as time passes. A person can still correct their own answer (change "did it" to "skipped") and "Delete my data" removes everything.
 
 Why not streaks: they reward opening the app and punish a missed day, which teaches people to tap "done" to keep a number alive and to quit the day it breaks. That works against the product's real goal (people choosing the real world), and against "never optimize time in the app".
+
+## 010 - Mission Companion, honest check-ins and adaptive memory (Stage 13, 2026-10-11)
+
+Source: `TouchGrass_AI_Recommended_Improvements.md`. Built on top of the Meadow (009), nothing removed.
+
+- **Companion**: every recommendation carries a note that reflects the person's own check-in, three small steps (time split 20/55/25, summing exactly), a "two minute" tiny start, and a window/balcony alternative when energy is low, time is minimal or weather is adverse. The Quiet Reset (3/8/4) is a real activity.
+- **One prompt per mission** replaces the earlier three side quests (a quieter ask; the meadow counts them as before).
+- **Honesty is never worth less than pretending**: telling us "did not go" or "could not start" plants a seed in the garden, gets a warm reply, and a smaller next step. Minutes are only credited for what was done. Evidence (elapsed time, photo, reflection) supports a record but never changes whether it counts.
+- **Adaptive memory** (`shared/learned.ts`) only learns from answers the person gave (no sensors, no location history). Every pattern has a minimum sample size, tentative wording, and can be confirmed, dismissed, restored, or all wiped ("start learning from scratch"). Missions, memories and meadow are never touched by that reset. "Never suggest this" lists are visible and reversible.
+- **Not built, on purpose**: step counts or GPS as proof (a browser cannot give them honestly and it would need tracking); photos stay on the device (IndexedDB), never uploaded.
+- **Value metrics** (`shared/metrics.ts`) measure real-world outcomes, not time in app. The A/B experiment is off by default (`EXPERIMENT_PCT=0`); results are anonymous aggregates behind `ADMIN_TOKEN`.
+- Migration 0004 adds `started_at` and `reflection` to events. Run `npm run db:migrate:remote` before deploying.

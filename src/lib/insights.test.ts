@@ -92,3 +92,48 @@ describe('summarizeLearning', () => {
     expect(summarizeLearning(items).join(' ')).not.toMatch(/fail|lazy|should|streak|bad/i)
   })
 })
+
+import { tastesOverTime } from './insights'
+
+describe('tastesOverTime: how preferences have moved', () => {
+  const m = (activity_id: string, date: string, hour: number, outcome: HistoryItem['outcome'] = 'completed'): HistoryItem => ({
+    recommendation_id: `r_${date}${hour}${activity_id}`,
+    timestamp: `${date}T${String(hour).padStart(2, '0')}:00:00+05:30`,
+    activity_id,
+    title: activity_id,
+    outcome,
+    enjoyment: null,
+    skip_reason: null,
+  })
+
+  it('says nothing until there are enough missions that happened (nine, three per third)', () => {
+    expect(tastesOverTime([])).toBeNull()
+    const eight = Array.from({ length: 8 }, (_, i) => m('brisk_walk_loop', `2026-09-0${i + 1}`, 8))
+    expect(tastesOverTime(eight)).toBeNull()
+    const skipped = Array.from({ length: 12 }, (_, i) => m('brisk_walk_loop', `2026-09-${String(i + 1).padStart(2, '0')}`, 8, 'skipped'))
+    expect(tastesOverTime(skipped)).toBeNull() // missions that did not happen are not "tastes"
+  })
+
+  it('shows a shift in the kind of mission and the time of day', () => {
+    const early = ['01', '02', '03'].map((d) => m('brisk_walk_loop', `2026-09-${d}`, 7)) // movement, mornings
+    const mid = ['10', '11', '12'].map((d) => m('easy_jog', `2026-09-${d}`, 7))
+    const recent = ['20', '21', '22'].map((d) => m('new_street_walk', `2026-09-${d}`, 18)) // exploring, evenings
+    const t = tastesOverTime([...recent, ...mid, ...early])! // order must not matter
+    expect(t.changed).toBe(true)
+    expect(t.early).toMatchObject({ family: 'movement', part: 'mornings', n: 3 })
+    expect(t.recent).toMatchObject({ family: 'exploration', part: 'evenings', n: 3 })
+    expect(t.lines).toEqual(['Early on you mostly did movement missions. Lately it has been exploring.', 'You used to go out mostly in the mornings. Lately it has been the evenings.'])
+  })
+
+  it('says when nothing has changed, without making it sound like a problem', () => {
+    const steady = Array.from({ length: 9 }, (_, i) => m('brisk_walk_loop', `2026-09-0${i + 1}`, 8))
+    const t = tastesOverTime(steady)!
+    expect(t.changed).toBe(false)
+    expect(t.lines).toEqual(['Your choices have stayed steady: mostly movement, in the mornings.'])
+  })
+
+  it('never uses a label or a verdict', () => {
+    const items = [...Array.from({ length: 4 }, (_, i) => m('brisk_walk_loop', `2026-09-0${i + 1}`, 7)), ...Array.from({ length: 5 }, (_, i) => m('new_street_walk', `2026-09-1${i}`, 19))]
+    for (const l of tastesOverTime(items)!.lines) expect(l).not.toMatch(/type of person|you are a|always|never|should|lazy|better|worse/i)
+  })
+})

@@ -1,6 +1,7 @@
 import { useId, useMemo } from 'react'
 import type { Family } from '@/shared/engine/types'
-import { SWAY_GROUPS, VIEW, bladeCount, blades, flowers, meadowLabel } from '@/lib/meadow-layout'
+import type { Garden } from '@/shared/meadow'
+import { SWAY_GROUPS, VIEW, bladeCount, blades, flowers, keepsakeSpots, lanternSpots, meadowLabel, sproutSpots, starSpots, treeSpots } from '@/lib/meadow-layout'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -9,6 +10,8 @@ type Props = {
   /** One flower per mission, by kind. */
   flowers: Family[]
   missions: number
+  /** What the garden holds besides grass and flowers (trees, keepsakes, lanterns, seeds, stars). */
+  garden?: Garden
   /** Start growing from here (the celebration): only blades and flowers beyond this animate in. */
   fromMinutes?: number
   fromFlowers?: number
@@ -26,7 +29,7 @@ const PETAL: Record<Family, string> = {
  * The meadow: a quiet picture that grows with the minutes the person has really spent outside. Decorative (the numbers
  * beside it are the content), and it only uses CSS transforms, so it stays smooth. It never wilts: nothing here shrinks.
  */
-export function Meadow({ minutes, flowers: families, missions, fromMinutes, fromFlowers, className }: Props) {
+export function Meadow({ minutes, flowers: families, missions, garden, fromMinutes, fromFlowers, className }: Props) {
   const uid = useId().replace(/:/g, '')
   const all = useMemo(() => blades(minutes), [minutes])
   const heads = useMemo(() => flowers(families), [families])
@@ -34,11 +37,16 @@ export function Meadow({ minutes, flowers: families, missions, fromMinutes, from
   const flowerGrowFrom = fromFlowers === undefined ? Infinity : fromFlowers
 
   const layers = [0, 1, 2].map((depth) => all.filter((b) => b.depth === depth))
+  const trees = useMemo(() => treeSpots(garden?.trees.length ?? 0), [garden?.trees.length])
+  const stones = useMemo(() => keepsakeSpots(garden?.keepsakes ?? 0), [garden?.keepsakes])
+  const lanterns = useMemo(() => lanternSpots(garden?.social_tokens ?? 0), [garden?.social_tokens])
+  const sprouts = useMemo(() => sproutSpots(garden?.seeds ?? 0), [garden?.seeds])
+  const stars = useMemo(() => starSpots(garden?.lessons ?? 0), [garden?.lessons])
 
   return (
     <svg
       role="img"
-      aria-label={meadowLabel(minutes, missions)}
+      aria-label={meadowLabel(minutes, missions, garden ? { trees: garden.trees.length, keepsakes: garden.keepsakes, social_tokens: garden.social_tokens, seeds: garden.seeds, lessons: garden.lessons } : undefined)}
       viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
       preserveAspectRatio="xMidYMax slice"
       className={cn('block w-full rounded-2xl', className)}
@@ -65,10 +73,26 @@ export function Meadow({ minutes, flowers: families, missions, fromMinutes, from
       <rect width={VIEW.width} height={VIEW.height} fill={`url(#${uid}-sky)`} />
       <circle cx="310" cy="64" r="64" fill={`url(#${uid}-sun)`} />
 
+      {/* a star for each thing the person confirmed we learned about them */}
+      {stars.map((st) => (
+        <path key={`star${st.index}`} className="meadow-twinkle" style={{ animationDelay: `${-st.index * 0.7}s` }} d={`M${st.x} ${st.y - 3 * st.scale} L${st.x + 0.9 * st.scale} ${st.y - 0.9 * st.scale} L${st.x + 3 * st.scale} ${st.y} L${st.x + 0.9 * st.scale} ${st.y + 0.9 * st.scale} L${st.x} ${st.y + 3 * st.scale} L${st.x - 0.9 * st.scale} ${st.y + 0.9 * st.scale} L${st.x - 3 * st.scale} ${st.y} L${st.x - 0.9 * st.scale} ${st.y - 0.9 * st.scale}Z`} fill="oklch(0.97 0.06 95)" />
+      ))}
+
       {/* distant hills */}
       <path d="M0 132 Q70 104 150 126 T300 118 T400 130 V200 H0Z" fill="oklch(0.3 0.06 160)" />
       <path d="M0 148 Q90 124 190 144 T400 140 V200 H0Z" fill="oklch(0.26 0.06 150)" />
       <rect y="156" width={VIEW.width} height="44" fill="oklch(0.2 0.05 150)" />
+
+      {/* a tree for each thing they have grown to enjoy */}
+      {trees.map((t) => (
+        <g key={`tree${t.index}`} className="meadow-sway" style={{ animationDelay: `${-t.index * 1.3}s`, animationDuration: '9s' }}>
+          <rect x={t.x - 1.6 * t.scale} y={t.y - 26 * t.scale} width={3.2 * t.scale} height={26 * t.scale} rx="1" fill="oklch(0.38 0.05 60)" />
+          <circle cx={t.x} cy={t.y - 33 * t.scale} r={11 * t.scale} fill="var(--primary)" fillOpacity="0.55" />
+          <circle cx={t.x - 8 * t.scale} cy={t.y - 26 * t.scale} r={8.5 * t.scale} fill="var(--primary)" fillOpacity="0.7" />
+          <circle cx={t.x + 8 * t.scale} cy={t.y - 27 * t.scale} r={8 * t.scale} fill="var(--primary)" fillOpacity="0.62" />
+          <circle cx={t.x - 2 * t.scale} cy={t.y - 36 * t.scale} r={4.5 * t.scale} fill="oklch(0.9 0.12 130)" fillOpacity="0.28" />
+        </g>
+      ))}
 
       {layers.map((layer, depth) => (
         <g key={depth}>
@@ -87,6 +111,29 @@ export function Meadow({ minutes, flowers: families, missions, fromMinutes, from
                 ))}
             </g>
           ))}
+        </g>
+      ))}
+
+      {/* the front of the garden: a seed for each honest check-in, a stack of stones for each memory kept, a lantern for each time shared */}
+      {sprouts.map((s) => (
+        <g key={`sprout${s.index}`} transform={`translate(${s.x} ${s.y}) scale(${s.scale})`}>
+          <path d="M0 0 L0 -5" stroke="var(--primary)" strokeWidth="1" strokeLinecap="round" />
+          <ellipse cx="-2.2" cy="-5.5" rx="2.4" ry="1.2" transform="rotate(-25 -2.2 -5.5)" fill="var(--primary)" />
+          <ellipse cx="2.2" cy="-6" rx="2.4" ry="1.2" transform="rotate(25 2.2 -6)" fill="var(--primary)" />
+        </g>
+      ))}
+      {stones.map((s) => (
+        <g key={`stone${s.index}`} transform={`translate(${s.x} ${s.y}) scale(${s.scale})`}>
+          <ellipse cx="0" cy="-1.6" rx="5.4" ry="2.2" fill="oklch(0.5 0.02 90)" />
+          <ellipse cx="0.4" cy="-4.6" rx="3.9" ry="1.9" fill="oklch(0.58 0.02 90)" />
+          <ellipse cx="-0.2" cy="-7" rx="2.5" ry="1.5" fill="oklch(0.66 0.02 90)" />
+        </g>
+      ))}
+      {lanterns.map((l) => (
+        <g key={`lantern${l.index}`} transform={`translate(${l.x} ${l.y}) scale(${l.scale})`}>
+          <path d="M0 0 L0 -14" stroke="oklch(0.4 0.04 60)" strokeWidth="1.1" strokeLinecap="round" />
+          <circle cx="0" cy="-16" r="7" fill="oklch(0.9 0.14 85)" fillOpacity="0.22" />
+          <circle cx="0" cy="-16" r="2.6" fill="oklch(0.92 0.14 85)" />
         </g>
       ))}
 

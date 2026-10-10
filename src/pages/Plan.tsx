@@ -1,13 +1,16 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useReducedMotion } from 'motion/react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Clock, Footprints, Sparkles, User, Users } from 'lucide-react'
-import type { RecommendResponse } from '@/shared/api'
-import type { ActivityMode, Mood, SkipReason, SocialMode } from '@/shared/engine/types'
-import { ChoiceGroup } from '@/components/tg/ChoiceGroup'
+import type { LearnedResponse, RecommendResponse } from '@/shared/api'
+import type { ActivityMode, DesiredOutcome, Mood, SkipReason, SocialMode } from '@/shared/engine/types'
+import type { Companion } from '@/shared/engine/types'
+import type { PlanPrefill } from '@/shared/next-step'
+import { AssistantSuggestion } from '@/components/tg/AssistantSuggestion'
+import { CheckinCard } from '@/components/tg/CheckinCard'
+import { CompanionAlternative, CompanionNote } from '@/components/tg/CompanionPanel'
 import { ContextPill } from '@/components/tg/ContextPill'
 import { GoingCard } from '@/components/tg/GoingCard'
-import { LocationPicker } from '@/components/tg/LocationPicker'
 import { MissionCard } from '@/components/tg/MissionCard'
 import { NearbyPlaces } from '@/components/tg/NearbyPlaces'
 import { PreferenceChip } from '@/components/tg/PreferenceChip'
@@ -15,17 +18,20 @@ import { PrimaryAction } from '@/components/tg/PrimaryAction'
 import { Button } from '@/components/ui/button'
 import { useMission, type PlanContext } from '@/hooks/useMission'
 import { useProfile } from '@/hooks/useProfile'
+import { getLearned } from '@/lib/api'
+import { loadCheckin, saveCheckin, socialAvailable, type Company } from '@/lib/checkin'
 import { loadPlace, type SavedPlace } from '@/lib/location'
-import { DURATION_OPTIONS_FOR_PLAN, MODE_CHOICES, MODE_PILL, MOOD_LABELS, SKIP_REASON_LABELS, WEATHER_LABELS } from '@/lib/vocab'
+import { takeNextPlan } from '@/lib/next-plan'
+import { DURATION_OPTIONS_FOR_PLAN, MODE_PILL, SKIP_REASON_LABELS, WEATHER_LABELS } from '@/lib/vocab'
 
 const MODE_LABEL: Record<SocialMode, string> = { solo: 'On your own', with_friend: 'With a friend', small_group: 'Small group' }
-const MODE_OPTIONS = MODE_CHOICES.map((m) => ({ value: m.value, label: m.label, hint: m.hint }))
-const MOOD_OPTIONS = (Object.keys(MOOD_LABELS) as Mood[]).map((m) => ({ value: m, label: MOOD_LABELS[m].label, hint: MOOD_LABELS[m].hint }))
-const MINUTE_OPTIONS = DURATION_OPTIONS_FOR_PLAN.map((m) => ({ value: m, label: m >= 60 ? `${m / 60 === Math.floor(m / 60) ? m / 60 : (m / 60).toFixed(1)} h` : `${m} min` }))
 
 function nearest(options: readonly number[], target: number): number {
   return options.reduce((best, o) => (Math.abs(o - target) < Math.abs(best - target) ? o : best), options[0] ?? target)
 }
+
+/** A mission saved in this browser before the companion existed has no companion; the screen must cope with that. */
+const companionOf = (rec: RecommendResponse): Companion | undefined => (rec as Partial<RecommendResponse>).companion
 
 function Skeleton() {
   // Same footprint as the real card, so nothing jumps when the pick arrives.
@@ -67,17 +73,27 @@ export default function Plan() {
   const { state: profile } = useProfile()
   const { phase, plan, go, swap, reset } = useMission()
 
-  const [minutes, setMinutes] = useState<number>(60)
-  const [mood, setMood] = useState<Mood>('ok')
-  const [friend, setFriend] = useState(false)
-  const [mode, setMode] = useState<'auto' | ActivityMode>('auto')
+  // A ready-made check-in handed over by "Try this" (a smaller next step, or something the assistant noticed). Read once.
+  const [queued] = useState<PlanPrefill | null>(() => takeNextPlan())
+  const remembered = useRef(loadCheckin()).current
+
+  const [minutes, setMinutes] = useState<number>(() => (queued ? nearest(DURATION_OPTIONS_FOR_PLAN, queued.duration_limit) : 60))
+  const [mood, setMood] = useState<Mood>(queued?.mood ?? remembered.mood ?? 'ok')
+  const [company, setCompany] = useState<Company>(() => (queued?.social_available !== undefined ? (queued.social_available ? 'together' : 'alone') : (remembered.company ?? 'alone')))
+  const [outcome, setOutcome] = useState<DesiredOutcome | null>(() => (queued && 'desired_outcome' in queued ? (queued.desired_outcome ?? null) : (remembered.outcome ?? null)))
+  const [mode, setMode] = useState<'auto' | ActivityMode>(queued?.mode ?? 'auto')
   const [swapOpen, setSwapOpen] = useState(false)
   const [place, setPlace] = useState<SavedPlace | null>(() => loadPlace())
-  const touchedMinutes = useRef(false)
+  const [suggestion, setSuggestion] = useState<LearnedResponse['suggestion']>(null)
+  const [suggestionGone, setSuggestionGone] = useState(false)
+  const touchedMinutes = useRef(!!queued)
   const missionArea = useRef<HTMLDivElement>(null)
+  const autoRan = useRef(false)
   const reduceMotion = useReducedMotion()
 
-  // Start from the person's own usual duration, unless they have already picked one.
+  const classic = profile.status === 'ready' && profile.data.flow === 'classic'
+
+  // Start from the person's own usual duration, unless they (or "Try this") already picked one.
   useEffect(() => {
     if (profile.status === 'ready' && !touchedMinutes.current) {
       setMinutes(nearest(DURATION_OPTIONS_FOR_PLAN, profile.data.profile.preferences.preferred_duration_min))
@@ -92,14 +108,61 @@ export default function Plan() {
     }
   }, [kind, reduceMotion])
 
-  const ctx: PlanContext = {
-    duration_limit: minutes,
-    mood,
-    social_available: friend,
-    mode,
-    ...(place ? { location: { lat: place.lat, lon: place.lon } } : {}),
-  }
+  const buildCtx = useCallback(
+    (over: { minutes?: number; mood?: Mood; company?: Company; outcome?: DesiredOutcome | null; mode?: 'auto' | ActivityMode } = {}): PlanContext => {
+      const o = over.outcome === undefined ? outcome : over.outcome
+      return {
+        duration_limit: over.minutes ?? minutes,
+        mood: over.mood ?? mood,
+        social_available: socialAvailable(over.company ?? company),
+        mode: over.mode ?? mode,
+        ...(o && !classic ? { desired_outcome: o } : {}),
+        ...(place ? { location: { lat: place.lat, lon: place.lon } } : {}),
+      }
+    },
+    [minutes, mood, company, outcome, mode, place, classic],
+  )
+
+  /** Remember today's answers (in this browser) so tomorrow's check-in can be shorter, then plan. */
+  const planNow = useCallback(
+    (ctx: PlanContext) => {
+      saveCheckin({ company, outcome, mood })
+      void plan(ctx)
+    },
+    [plan, company, outcome, mood],
+  )
+
+  // "Try this": run the handed-over check-in straight away, once.
+  useEffect(() => {
+    if (!queued || autoRan.current || profile.status === 'loading') return
+    autoRan.current = true
+    if (profile.status !== 'ready') return
+    planNow(buildCtx())
+  }, [queued, profile.status, planNow, buildCtx])
+
+  // Something the assistant noticed that fits right now. Quiet, optional, and never in the way.
+  useEffect(() => {
+    if (classic || profile.status !== 'ready') return
+    const ac = new AbortController()
+    getLearned(ac.signal)
+      .then((l) => setSuggestion(l.suggestion))
+      .catch(() => {})
+    return () => ac.abort()
+  }, [classic, profile.status])
+
   const busy = phase.kind === 'loading'
+  const ctx = buildCtx()
+
+  const tryTheSuggestion = () => {
+    if (!suggestion) return
+    const p = suggestion.plan
+    const m = nearest(DURATION_OPTIONS_FOR_PLAN, p.duration_limit)
+    setMinutes(m)
+    if (p.mood) setMood(p.mood)
+    if (p.mode) setMode(p.mode)
+    setSuggestionGone(true)
+    planNow(buildCtx({ minutes: m, mood: p.mood, mode: p.mode }))
+  }
 
   const status =
     phase.kind === 'loading'
@@ -116,37 +179,34 @@ export default function Plan() {
     <section className="space-y-6">
       <div>
         <h1 className="font-display text-3xl font-medium tracking-tight">Plan my next hour</h1>
-        <p className="mt-2 text-muted-foreground">Set the scene, and we will pick one thing worth leaving the screen for.</p>
+        <p className="mt-2 text-muted-foreground">A quick check-in, and we will pick one thing worth leaving the screen for.</p>
       </div>
 
+      {phase.kind === 'idle' && suggestion && !suggestionGone && !classic && (
+        <AssistantSuggestion suggestion={suggestion} onTry={tryTheSuggestion} onDismiss={() => setSuggestionGone(true)} disabled={busy} />
+      )}
+
       {phase.kind !== 'going' && (
-        <div className="space-y-5 rounded-2xl border bg-card/60 p-5">
-          <div>
-            <p className="mb-2 text-sm font-medium">How long do you have?</p>
-            <ChoiceGroup
-              label="Time available"
-              options={MINUTE_OPTIONS}
-              value={minutes}
-              onChange={(v) => {
-                touchedMinutes.current = true
-                setMinutes(v)
-              }}
-              disabled={busy}
-            />
-          </div>
-          <div>
-            <p className="mb-2 text-sm font-medium">How is your energy?</p>
-            <ChoiceGroup label="Energy" options={MOOD_OPTIONS} value={mood} onChange={setMood} disabled={busy} />
-          </div>
-          <div>
-            <p className="mb-2 text-sm font-medium">How big should it be?</p>
-            <ChoiceGroup label="Size of the activity" options={MODE_OPTIONS} value={mode} onChange={setMode} disabled={busy} />
-          </div>
-          <LocationPicker place={place} onChange={setPlace} disabled={busy} />
-          <PreferenceChip selected={friend} onToggle={() => setFriend((f) => !f)} disabled={busy}>
-            Someone is free to join me
-          </PreferenceChip>
-        </div>
+        <CheckinCard
+          minutes={minutes}
+          onMinutes={(v) => {
+            touchedMinutes.current = true
+            setMinutes(v)
+          }}
+          mood={mood}
+          onMood={setMood}
+          company={company}
+          onCompany={setCompany}
+          outcome={outcome}
+          onOutcome={setOutcome}
+          mode={mode}
+          onMode={setMode}
+          place={place}
+          onPlace={setPlace}
+          memory={remembered}
+          classic={classic}
+          disabled={busy}
+        />
       )}
 
       <p role="status" className="sr-only">
@@ -154,98 +214,103 @@ export default function Plan() {
       </p>
 
       <div ref={missionArea} className="scroll-mt-6 space-y-6">
-      {phase.kind === 'idle' && (
-        <PrimaryAction onClick={() => void plan(ctx)}>Find my mission</PrimaryAction>
-      )}
+        {phase.kind === 'idle' && <PrimaryAction onClick={() => planNow(ctx)}>Find my mission</PrimaryAction>}
 
-      {phase.kind === 'loading' && <Skeleton />}
+        {phase.kind === 'loading' && <Skeleton />}
 
-      {phase.kind === 'shown' && (
-        <div className="space-y-3">
-          <MissionCard
-            title={phase.rec.title}
-            reason={phase.rec.reason}
-            firstStep={phase.rec.first_step}
-            preparation={phase.rec.preparation}
-            transitionKey={`${phase.rec.activity_id}|${phase.rec.source}`}
-            busy={phase.upgrading}
-            meta={<Meta rec={phase.rec} upgrading={phase.upgrading} />}
-            actions={
-              <>
-                <PrimaryAction onClick={go}>Let's go</PrimaryAction>
-                <Button variant="ghost" onClick={() => setSwapOpen((o) => !o)} aria-expanded={swapOpen}>
-                  Not this one
-                </Button>
-              </>
-            }
-          />
-          {swapOpen && (
-            <div className="rounded-2xl border bg-card/60 p-4">
-              <p className="mb-3 text-sm text-muted-foreground">What got in the way? It helps us choose better next time.</p>
-              <div className="flex flex-wrap gap-2">
-                {(Object.keys(SKIP_REASON_LABELS) as SkipReason[]).map((r) => (
-                  <PreferenceChip
-                    key={r}
-                    selected={false}
-                    onToggle={() => {
+        {phase.kind === 'shown' && (
+          <div className="space-y-3">
+            <MissionCard
+              title={phase.rec.title}
+              reason={phase.rec.reason}
+              lead={!classic && companionOf(phase.rec) ? <CompanionNote companion={companionOf(phase.rec)!} /> : undefined}
+              firstStep={phase.rec.first_step}
+              preparation={phase.rec.preparation}
+              transitionKey={`${phase.rec.activity_id}|${phase.rec.source}`}
+              busy={phase.upgrading}
+              meta={<Meta rec={phase.rec} upgrading={phase.upgrading} />}
+              actions={
+                <>
+                  <PrimaryAction onClick={() => go(false)}>Let's go</PrimaryAction>
+                  {!classic && companionOf(phase.rec) && (
+                    <Button variant="outline" onClick={() => go(true)}>
+                      Just two minutes
+                    </Button>
+                  )}
+                  <Button variant="ghost" onClick={() => setSwapOpen((o) => !o)} aria-expanded={swapOpen}>
+                    Not this one
+                  </Button>
+                </>
+              }
+            />
+            {!classic && companionOf(phase.rec) && <CompanionAlternative companion={companionOf(phase.rec)!} />}
+            {swapOpen && (
+              <div className="rounded-2xl border bg-card/60 p-4">
+                <p className="mb-3 text-sm text-muted-foreground">What got in the way? It helps us choose better next time.</p>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(SKIP_REASON_LABELS) as SkipReason[]).map((r) => (
+                    <PreferenceChip
+                      key={r}
+                      selected={false}
+                      onToggle={() => {
+                        setSwapOpen(false)
+                        void swap(r, ctx)
+                      }}
+                    >
+                      {SKIP_REASON_LABELS[r]}
+                    </PreferenceChip>
+                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
                       setSwapOpen(false)
-                      void swap(r, ctx)
+                      void swap(undefined, ctx)
                     }}
                   >
-                    {SKIP_REASON_LABELS[r]}
-                  </PreferenceChip>
-                ))}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSwapOpen(false)
-                    void swap(undefined, ctx)
-                  }}
-                >
-                  Just show another
-                </Button>
+                    Just show another
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-          <NearbyPlaces activityId={phase.rec.activity_id} location={place ? { lat: place.lat, lon: place.lon } : null} />
-          {phase.rec.persisted === false && (
-            <p className="px-1 text-sm text-muted-foreground">
-              This idea was made on your device because our server could not be reached, so it will not be remembered.
-            </p>
-          )}
-          {phase.rec.fallback && (
-            <p className="flex items-start gap-2 px-1 text-sm text-muted-foreground">
-              <Footprints className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-              <span>
-                Not up for it? A smaller idea: <strong className="font-medium text-foreground">{phase.rec.fallback.title}</strong>.
-              </span>
-            </p>
-          )}
-        </div>
-      )}
+            )}
+            <NearbyPlaces activityId={phase.rec.activity_id} location={place ? { lat: place.lat, lon: place.lon } : null} />
+            {phase.rec.persisted === false && (
+              <p className="px-1 text-sm text-muted-foreground">
+                This idea was made on your device because our server could not be reached, so it will not be remembered.
+              </p>
+            )}
+            {phase.rec.fallback && (
+              <p className="flex items-start gap-2 px-1 text-sm text-muted-foreground">
+                <Footprints className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                <span>
+                  Not up for it? A smaller idea: <strong className="font-medium text-foreground">{phase.rec.fallback.title}</strong>.
+                </span>
+              </p>
+            )}
+          </div>
+        )}
 
-      {phase.kind === 'going' && <GoingCard rec={phase.rec} onBack={() => navigate('/feedback')} onChooseAnother={reset} />}
+        {phase.kind === 'going' && <GoingCard rec={phase.rec} onBack={() => navigate('/feedback')} onChooseAnother={reset} classic={classic} />}
 
-      {phase.kind === 'needs_profile' && (
-        <div className="rounded-2xl border bg-card p-6">
-          <h2 className="font-display text-xl font-medium">First, tell us what moves you</h2>
-          <p className="mt-2 text-muted-foreground">A minute of choices lets us pick things you will actually start.</p>
-          <Button asChild className="mt-4">
-            <Link to="/onboarding">Set my preferences</Link>
-          </Button>
-        </div>
-      )}
+        {phase.kind === 'needs_profile' && (
+          <div className="rounded-2xl border bg-card p-6">
+            <h2 className="font-display text-xl font-medium">First, tell us what moves you</h2>
+            <p className="mt-2 text-muted-foreground">A minute of choices lets us pick things you will actually start.</p>
+            <Button asChild className="mt-4">
+              <Link to="/onboarding">Set my preferences</Link>
+            </Button>
+          </div>
+        )}
 
-      {phase.kind === 'error' && (
-        <div role="alert" className="rounded-2xl border border-destructive/40 bg-card p-6">
-          <h2 className="font-display text-xl font-medium">That did not work</h2>
-          <p className="mt-2 text-muted-foreground">{phase.message}</p>
-          <Button className="mt-4" onClick={() => void plan(ctx)}>
-            Try again
-          </Button>
-        </div>
-      )}
+        {phase.kind === 'error' && (
+          <div role="alert" className="rounded-2xl border border-destructive/40 bg-card p-6">
+            <h2 className="font-display text-xl font-medium">That did not work</h2>
+            <p className="mt-2 text-muted-foreground">{phase.message}</p>
+            <Button className="mt-4" onClick={() => planNow(ctx)}>
+              Try again
+            </Button>
+          </div>
+        )}
       </div>
     </section>
   )

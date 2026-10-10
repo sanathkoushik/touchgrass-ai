@@ -14,7 +14,7 @@ export function remainingText(m: Milestone): string | null {
     twentyfive_missions: plural(left, 'more mission', 'more missions'),
     all_kinds: plural(left, 'more kind of activity', 'more kinds of activity'),
     variety: plural(left, 'more different activity', 'more different activities'),
-    quester: plural(left, 'more side quest', 'more side quests'),
+    quester: plural(left, 'more little prompt', 'more little prompts'),
     loved_it: plural(left, 'more 5 out of 5', 'more 5 out of 5s'),
     honest_checkins: plural(left, 'more honest check-in', 'more honest check-ins'),
   }

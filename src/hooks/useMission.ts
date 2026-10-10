@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RecommendResponse } from '@/shared/api'
 import type { Location } from '@/shared/context'
-import type { ActivityMode, Mood, SkipReason } from '@/shared/engine/types'
+import type { ActivityMode, DesiredOutcome, Mood, SkipReason } from '@/shared/engine/types'
 import { ApiError, recommend, sendFeedback, upgradeRecommendation } from '@/lib/api'
 import { clearMission, loadMission, saveMission } from '@/lib/mission-store'
 
@@ -11,6 +11,8 @@ export interface PlanContext {
   social_available: boolean
   /** 'auto' lets the server adapt to energy and recent history. */
   mode?: 'auto' | ActivityMode
+  /** What they want out of this one, if they said. */
+  desired_outcome?: DesiredOutcome
   /** Only when the person shared one. Rounded; used for the weather lookup and never stored. */
   location?: Location
 }
@@ -99,12 +101,12 @@ export function useMission() {
   )
 
   /** "Let's go": the person is leaving the screen. Stops any pending upgrade so nothing changes under them. */
-  const go = useCallback(() => {
+  const go = useCallback((tiny = false) => {
     const current = phaseRef.current
     if (current.kind !== 'shown') return
     abortRef.current?.abort()
     // "wentAt" starts the clock on time away from the app; the Meadow credits that time honestly.
-    saveMission({ recommendation: current.rec, stage: 'going', shownAt: Date.now(), wentAt: Date.now(), questsTicked: [] })
+    saveMission({ recommendation: current.rec, stage: 'going', shownAt: Date.now(), wentAt: Date.now(), questsTicked: [], ...(tiny ? { tiny: true } : {}) })
     setPhase({ kind: 'going', rec: current.rec })
   }, [])
 

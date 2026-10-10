@@ -7,6 +7,7 @@ import { formatMinutes, type RewardSummary } from '@/shared/meadow'
 import { Button } from '@/components/ui/button'
 import { getMeadow } from '@/lib/api'
 import { celebrationHeadline, remainingText } from '@/lib/meadow-text'
+import { AvoidPrompt } from './AvoidPrompt'
 import { Meadow } from './Meadow'
 import { PrimaryAction } from './PrimaryAction'
 
@@ -14,6 +15,12 @@ type Props = {
   outcome: 'completed' | 'partial'
   enjoyment: number | null
   reward: RewardSummary
+  /** Plain sentences saying what will be done differently because of the answers just given. */
+  adaptations?: string[]
+  /** They said they would not repeat it: offer to stop suggesting it. */
+  askToAvoid?: { activity_id: string; title: string }
+  /** They wrote a note or kept a photo. */
+  keptMemory?: boolean
   onNext: () => void
 }
 
@@ -43,7 +50,7 @@ function useCountUp(target: number, ms = 1100): number {
  * The moment after a mission. It says, in real numbers, what the person just did: how much time went into the meadow,
  * how it grew, and any milestone they just earned. No scores, no comparison with anyone, nothing that can be lost.
  */
-export function Celebration({ outcome, enjoyment, reward, onNext }: Props) {
+export function Celebration({ outcome, enjoyment, reward, adaptations = [], askToAvoid, keptMemory, onNext }: Props) {
   const reduce = useReducedMotion()
   const [meadow, setMeadow] = useState<MeadowResponse | null>(null)
   const added = useCountUp(reward.credited_minutes)
@@ -67,6 +74,7 @@ export function Celebration({ outcome, enjoyment, reward, onNext }: Props) {
           minutes={reward.total_minutes}
           flowers={flowers}
           missions={reward.missions}
+          garden={meadow?.garden}
           fromMinutes={before}
           fromFlowers={Math.max(0, flowers.length - 1)}
           className="aspect-[2/1] rounded-none sm:aspect-[5/2]"
@@ -84,7 +92,8 @@ export function Celebration({ outcome, enjoyment, reward, onNext }: Props) {
 
       <div className="space-y-2">
         <h1 className="font-display text-3xl font-medium tracking-tight">{celebrationHeadline(outcome, enjoyment)}</h1>
-        {reward.quests_done > 0 && <p className="text-muted-foreground">You also found your side quests along the way.</p>}
+        {reward.quests_done > 0 && <p className="text-muted-foreground">You also tried the little prompt along the way.</p>}
+        {keptMemory && <p className="text-muted-foreground">Kept as a memory in your meadow.</p>}
       </div>
 
       {reward.new_milestones.length > 0 && (
@@ -109,6 +118,19 @@ export function Celebration({ outcome, enjoyment, reward, onNext }: Props) {
           ))}
         </ul>
       )}
+
+      {adaptations.length > 0 && (
+        <div className="space-y-2 rounded-2xl border bg-card p-4">
+          <p className="text-xs font-medium tracking-wide text-primary uppercase">What changes next</p>
+          <ul className="space-y-1.5 text-sm">
+            {adaptations.map((a) => (
+              <li key={a}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {askToAvoid && <AvoidPrompt activity={askToAvoid} />}
 
       {next && <p className="text-sm text-muted-foreground">Next up: {next}.</p>}
 

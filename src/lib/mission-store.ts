@@ -18,6 +18,8 @@ export interface StoredMission {
   wentAt?: number
   /** Which side quests they have ticked off so far (by position). */
   questsTicked?: boolean[]
+  /** They chose "just two minutes": the screen starts with a gentle two-minute goal. */
+  tiny?: boolean
 }
 
 export function loadMission(): StoredMission | null {
@@ -37,6 +39,7 @@ export function loadMission(): StoredMission | null {
       shownAt: typeof m.shownAt === 'number' ? m.shownAt : Date.now(),
       ...(wentAt !== undefined ? { wentAt } : {}),
       ...(questsTicked ? { questsTicked } : {}),
+      ...(m.tiny === true ? { tiny: true } : {}),
     }
   } catch {
     return null

@@ -3,9 +3,12 @@ import { Link } from 'react-router-dom'
 import type { HistoryItem, ProfileStats } from '@/shared/api'
 import { Button } from '@/components/ui/button'
 import type { MeadowResponse } from '@/shared/api'
+import { LearnedPanel } from '@/components/tg/LearnedPanel'
 import { MeadowOverview } from '@/components/tg/MeadowOverview'
+import { MemoryCards } from '@/components/tg/MemoryCards'
+import { ValuePanel } from '@/components/tg/ValuePanel'
 import { ApiError, getHistory, getMeadow, getProfile } from '@/lib/api'
-import { summarizeLearning } from '@/lib/insights'
+import { summarizeLearning, tastesOverTime } from '@/lib/insights'
 import { cn } from '@/lib/utils'
 
 const OUTCOME_LABEL: Record<HistoryItem['outcome'], string> = {
@@ -71,6 +74,7 @@ export default function History() {
   }, [items])
 
   const noticed = useMemo(() => summarizeLearning(items ?? []), [items])
+  const tastes = useMemo(() => tastesOverTime(items ?? []), [items])
 
   return (
     <section className="space-y-8">
@@ -84,6 +88,26 @@ export default function History() {
       ) : (
         <div aria-busy="true" aria-hidden="true" className="aspect-[2/1] animate-pulse rounded-2xl border bg-card sm:aspect-[5/2]" />
       )}
+
+      <MemoryCards />
+
+      <LearnedPanel />
+
+      {tastes && (
+        <section aria-labelledby="tastes-heading" className="space-y-2">
+          <h2 id="tastes-heading" className="font-display text-xl font-medium">
+            Then and now
+          </h2>
+          <div className="space-y-1.5 rounded-2xl border bg-card p-4 text-sm">
+            {tastes.lines.map((l) => (
+              <p key={l}>{l}</p>
+            ))}
+            <p className="pt-1 text-xs text-muted-foreground">From your first {tastes.early.n} missions compared with your latest {tastes.recent.n}. Tastes change, and that is fine.</p>
+          </div>
+        </section>
+      )}
+
+      <ValuePanel />
 
       <div>
         <h2 className="font-display text-2xl font-medium tracking-tight">What actually worked</h2>

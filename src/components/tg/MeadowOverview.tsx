@@ -1,4 +1,4 @@
-import { Circle, Sparkles } from 'lucide-react'
+import { Circle, Sparkles, Sprout, Star, TreeDeciduous, Lamp, Gem } from 'lucide-react'
 import type { MeadowResponse } from '@/shared/api'
 import { formatMinutes } from '@/shared/meadow'
 import { earnedOn, remainingText, weekdayShort } from '@/lib/meadow-text'
@@ -18,11 +18,20 @@ export function MeadowOverview({ summary }: Props) {
   const kinds = (Object.keys(KIND_LABEL) as (keyof typeof KIND_LABEL)[]).filter((k) => minutes_by_family[k] > 0)
   const moreThanLastWeek = week.minutes > week.last_week_minutes && week.last_week_minutes > 0 ? week.minutes - week.last_week_minutes : 0
   const nextText = next ? remainingText(next) : null
+  const g = summary.garden
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+  const gardenLines = [
+    g.trees.length > 0 && { Icon: TreeDeciduous, text: `${plural(g.trees.length, 'tree', 'trees')}: ${g.trees.map((t) => t.title).join(', ')}, grown to enjoy` },
+    g.keepsakes > 0 && { Icon: Gem, text: `${plural(g.keepsakes, 'keepsake', 'keepsakes')} from memories you kept` },
+    g.social_tokens > 0 && { Icon: Lamp, text: `${plural(g.social_tokens, 'lantern', 'lanterns')} for time spent with other people` },
+    g.seeds > 0 && { Icon: Sprout, text: `${plural(g.seeds, 'seed', 'seeds')} for telling us the truth, even when it did not go to plan` },
+    g.lessons > 0 && { Icon: Star, text: `${plural(g.lessons, 'star', 'stars')} for things you confirmed we learned about you` },
+  ].filter((x): x is { Icon: typeof Sprout; text: string } => !!x)
 
   return (
     <div className="space-y-8">
       <div className="relative overflow-hidden rounded-2xl border bg-card shadow-xl shadow-black/30">
-        <Meadow minutes={total_minutes} flowers={summary.flowers} missions={missions} className="aspect-[2/1] rounded-none sm:aspect-[5/2]" />
+        <Meadow minutes={total_minutes} flowers={summary.flowers} missions={missions} garden={summary.garden} className="aspect-[2/1] rounded-none sm:aspect-[5/2]" />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-background/90 via-background/55 to-transparent px-6 pt-16 pb-5">
           <p className="font-display text-4xl font-medium tracking-tight sm:text-5xl">
             {total_minutes > 0 ? formatMinutes(total_minutes) : 'Just seedlings'}
@@ -30,7 +39,7 @@ export function MeadowOverview({ summary }: Props) {
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {missions > 0
-              ? `from ${missions} mission${missions === 1 ? '' : 's'}${quests_done > 0 ? ` and ${quests_done} side quest${quests_done === 1 ? '' : 's'}` : ''}. It only ever grows.`
+              ? `from ${missions} mission${missions === 1 ? '' : 's'}${quests_done > 0 ? ` and ${quests_done} little prompt${quests_done === 1 ? '' : 's'}` : ''}. It only ever grows.`
               : 'Your meadow grows with every minute you spend outside. Your first mission plants the first flower.'}
           </p>
         </div>
@@ -75,6 +84,21 @@ export function MeadowOverview({ summary }: Props) {
         </div>
         {moreThanLastWeek > 0 && <p className="text-sm text-muted-foreground">That is {formatMinutes(moreThanLastWeek)} more than last week.</p>}
       </div>
+
+      {gardenLines.length > 0 && (
+        <div className="space-y-2 rounded-2xl border bg-card p-4">
+          <h2 className="font-display text-lg font-medium">In your garden</h2>
+          <ul className="space-y-1.5 text-sm">
+            {gardenLines.map(({ Icon, text }) => (
+              <li key={text} className="flex items-start gap-2.5">
+                <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                <span>{text}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-muted-foreground">A record of what you have done and learned, not a score. Nothing in it can wilt or be taken away.</p>
+        </div>
+      )}
 
       {kinds.length > 0 && (
         <div className="flex flex-wrap gap-2" aria-label="Time by kind of activity">

@@ -90,4 +90,10 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Completed and partial events are never pruned (D1 retention only removes other outcomes). Keep it that way or the meadow shrinks.
 - The meadow layout is deterministic and prefix-stable (blade N never moves): do not change `blade()`/`flower()` math without accepting that every user's meadow reshuffles.
 - Home is in the main bundle: only import light modules into it (`lib/away.ts`, not GoingCard).
-- Migrations so far: 0001 init, 0002 place_cache, 0003 meadow.
+- Migrations so far: 0001 init, 0002 place_cache, 0003 meadow, 0004 mission_companion.
+
+## Mission Companion (Stage 13, see docs/DECISIONS.md 010)
+- Honesty must never be worth less than pretending: declined/could-not-start answers get recognition (seeds) and a smaller next step; never punish, never credit minutes that were not done.
+- Learned patterns come only from the person's answers, need minimum samples, use tentative wording, and must stay confirmable/dismissible/resettable. Resetting never deletes missions, memories or the meadow.
+- Photos stay on the device (IndexedDB). Do not upload them or add step-count/GPS proof.
+- One prompt per mission. Experiment arm is off unless EXPERIMENT_PCT is set.

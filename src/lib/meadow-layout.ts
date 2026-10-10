@@ -83,10 +83,88 @@ export function flowers(families: Family[]): Flower[] {
 }
 
 /** Plain-words description for screen readers: the picture is decoration, the numbers are the content. */
-export function meadowLabel(minutes: number, missions: number): string {
-  if (minutes <= 0) return 'Your meadow: just a few seedlings so far. It grows with every minute you spend outside.'
+export function meadowLabel(
+  minutes: number,
+  missions: number,
+  garden?: { trees: number; keepsakes: number; social_tokens: number; seeds: number; lessons: number },
+): string {
+  const part = (count: number, one: string, many: string) => (count > 0 ? [`${count} ${count === 1 ? one : many}`] : [])
+  const parts = garden
+    ? [
+        ...part(garden.trees, 'tree for something you have grown to enjoy', 'trees for things you have grown to enjoy'),
+        ...part(garden.keepsakes, 'keepsake', 'keepsakes'),
+        ...part(garden.social_tokens, 'lantern for time with others', 'lanterns for time with others'),
+        ...part(garden.seeds, 'seed for an honest check-in', 'seeds for honest check-ins'),
+        ...part(garden.lessons, 'star for something learned', 'stars for things learned'),
+      ]
+    : []
+  const extra = parts.length > 0 ? ` In the garden: ${parts.join(', ')}.` : ''
+  if (minutes <= 0) return `Your meadow: just a few seedlings so far. It grows with every minute you spend outside.${extra}`
   const h = Math.floor(minutes / 60)
   const m = Math.round(minutes % 60)
   const time = h > 0 ? `${h} hour${h === 1 ? '' : 's'}${m ? ` ${m} minutes` : ''}` : `${m} minutes`
-  return `Your meadow, grown from ${time} outside across ${missions} mission${missions === 1 ? '' : 's'}.`
+  return `Your meadow, grown from ${time} outside across ${missions} mission${missions === 1 ? '' : 's'}.${extra}`
+}
+
+// ------------------------------------------------------------------ the memory garden
+// Same promise as the grass: element N is always in the same place, so the garden only ever grows.
+
+export const GARDEN_CAPS = { trees: 6, keepsakes: 8, lanterns: 8, sprouts: 12, stars: 8 } as const
+
+export interface Spot {
+  index: number
+  x: number
+  y: number
+  scale: number
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10
+
+/** Trees stand on the far hill, spread across the width in a fixed order (never bunched at one side). */
+const TREE_XS = [70, 310, 190, 20, 360, 130]
+export function treeSpots(count: number): Spot[] {
+  return Array.from({ length: Math.min(count, GARDEN_CAPS.trees) }, (_, i) => {
+    const r = rng(i * 31337 + 5)
+    return { index: i, x: TREE_XS[i]! + round1((r() - 0.5) * 16), y: round1(150 + r() * 6), scale: round1(0.95 + r() * 0.3) }
+  })
+}
+
+/** Small stacks of stones in the foreground: one per memory kept. */
+export function keepsakeSpots(count: number): Spot[] {
+  return Array.from({ length: Math.min(count, GARDEN_CAPS.keepsakes) }, (_, i) => {
+    const r = rng(i * 8191 + 11)
+    return { index: i, x: round1(14 + r() * 372), y: round1(176 + r() * 12), scale: round1(0.85 + r() * 0.35) }
+  })
+}
+
+/** Little lanterns on short posts: one per mission shared with someone. */
+export function lanternSpots(count: number): Spot[] {
+  return Array.from({ length: Math.min(count, GARDEN_CAPS.lanterns) }, (_, i) => {
+    const r = rng(i * 4093 + 17)
+    return { index: i, x: round1(18 + r() * 364), y: round1(166 + r() * 14), scale: round1(0.9 + r() * 0.25) }
+  })
+}
+
+/** Tiny sprouts in front: one per honest check-in. */
+export function sproutSpots(count: number): Spot[] {
+  return Array.from({ length: Math.min(count, GARDEN_CAPS.sprouts) }, (_, i) => {
+    const r = rng(i * 2749 + 23)
+    return { index: i, x: round1(10 + r() * 380), y: round1(186 + r() * 10), scale: round1(0.8 + r() * 0.3) }
+  })
+}
+
+/** Stars in the sky: one per lesson the person confirmed. Kept clear of the sun. */
+export function starSpots(count: number): Spot[] {
+  const out: Spot[] = []
+  let attempt = 0
+  while (out.length < Math.min(count, GARDEN_CAPS.stars)) {
+    const r = rng(out.length * 1597 + attempt * 101 + 29)
+    attempt += 1
+    const x = 14 + r() * 372
+    const y = 10 + r() * 52
+    if (Math.hypot(x - 310, y - 64) < 50) continue // not on the sun
+    out.push({ index: out.length, x: round1(x), y: round1(y), scale: round1(0.8 + r() * 0.5) })
+    attempt = 0
+  }
+  return out
 }

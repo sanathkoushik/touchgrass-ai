@@ -8,7 +8,9 @@ import { PreferenceChip } from '@/components/tg/PreferenceChip'
 import { PrimaryAction } from '@/components/tg/PrimaryAction'
 import { Button } from '@/components/ui/button'
 import { useProfile } from '@/hooks/useProfile'
-import { ApiError, deleteProfile, saveProfile } from '@/lib/api'
+import { ApiError, deleteProfile, getMissions, getProfile, saveProfile } from '@/lib/api'
+import { clearCheckin } from '@/lib/checkin'
+import { forgetAllPhotos } from '@/lib/photos'
 import { clearPlace } from '@/lib/location'
 import { clearMission, setProfileHint } from '@/lib/mission-store'
 import {
@@ -53,6 +55,7 @@ export default function Onboarding() {
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   // Pre-fill once from the saved profile; never overwrite what the person is typing.
   const prefilled = useRef(false)
@@ -102,6 +105,28 @@ export default function Onboarding() {
     }
   }
 
+  /** The person's own data, as a file: their preferences and every mission record. (Photos stay on the device, so they are not in it.) */
+  async function downloadMyData() {
+    setExporting(true)
+    setError(null)
+    try {
+      const [profile, missions] = await Promise.all([getProfile(), getMissions(1000)])
+      const file = { exported_at: new Date().toISOString(), note: 'Your TouchGrass AI data. Photos are kept only on your device and are not included.', profile: profile?.profile ?? null, missions: missions.records }
+      const url = URL.createObjectURL(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'touchgrass-my-data.json'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not prepare your data. Please try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   async function removeEverything() {
     setDeleting(true)
     setError(null)
@@ -109,6 +134,8 @@ export default function Onboarding() {
       await deleteProfile()
       clearMission()
       clearPlace()
+      clearCheckin()
+      await forgetAllPhotos()
       setProfileHint(false)
       navigate('/')
     } catch (err) {
@@ -210,12 +237,20 @@ export default function Onboarding() {
       {existing && (
         <div className="space-y-3 border-t pt-6">
           <h2 className="font-display text-lg font-medium">Your data</h2>
-          <p className="text-sm text-muted-foreground">Everything we know about you is what you entered here and what you told us after each mission.</p>
-          {!confirmDelete ? (
-            <Button variant="outline" onClick={() => setConfirmDelete(true)}>
-              Delete my data
+          <p className="text-sm text-muted-foreground">
+            Everything we know about you is what you entered here and what you told us after each mission. What we have guessed from it is on your meadow page, where you can correct it or start again.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void downloadMyData()} disabled={exporting}>
+              {exporting ? 'Preparing…' : 'Download my data'}
             </Button>
-          ) : (
+            {!confirmDelete && (
+              <Button variant="outline" onClick={() => setConfirmDelete(true)}>
+                Delete my data
+              </Button>
+            )}
+          </div>
+          {confirmDelete && (
             <div role="alertdialog" aria-label="Confirm deletion" className="space-y-3 rounded-xl border border-destructive/40 bg-card p-4">
               <p className="text-sm">This permanently removes your preferences and your whole history. It cannot be undone.</p>
               <div className="flex gap-2">

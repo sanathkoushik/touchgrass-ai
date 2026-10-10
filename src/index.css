@@ -182,3 +182,21 @@
     animation: none;
   }
 }
+
+@keyframes meadow-twinkle {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.meadow-twinkle {
+  animation: meadow-twinkle 4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .meadow-twinkle {
+    animation: none;
+  }
+}

@@ -1,4 +1,5 @@
-import type { ActivityMode, Avoidance, Equipment, Goal, Mood, Motivator, SkipReason, SocialPreference, WeatherCategory } from '@/shared/engine/types'
+import type { Company } from './checkin'
+import type { ActivityMode, Avoidance, DesiredOutcome, Equipment, Feeling, Goal, Helper, Mood, ParticipationStatus, WouldRepeat, Motivator, SkipReason, SocialPreference, WeatherCategory } from '@/shared/engine/types'
 
 /**
  * Human wording for every choice the person can make. These are `Record<Union, ...>` on purpose:
@@ -96,7 +97,7 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
   other: 'Something else',
 }
 
-export const DURATION_OPTIONS_FOR_PLAN = [15, 30, 45, 60, 90, 120] as const
+export const DURATION_OPTIONS_FOR_PLAN = [5, 15, 30, 45, 60, 90, 120] as const
 
 /** Plain words for the live sky, as shown in the app (from Open-Meteo's weather code). */
 export const WEATHER_LABELS: Record<WeatherCategory, string> = {
@@ -129,4 +130,45 @@ export const MODE_PILL: Record<ActivityMode, string | null> = {
   minimum: 'Small start',
   normal: null,
   excellent: 'Stretch',
+}
+
+/** What the person wants out of this mission (the check-in). */
+export const DESIRED_OUTCOME_LABELS: Record<DesiredOutcome, { label: string; hint: string }> = {
+  clear_head: { label: 'Clear my head', hint: 'Calm and quiet' },
+  energise: { label: 'Feel more energetic', hint: 'Get moving' },
+  break_routine: { label: 'Break the routine', hint: 'Something different' },
+  connect: { label: 'Feel connected', hint: 'With someone' },
+}
+
+export const COMPANY_LABELS: Record<Company, { label: string; hint: string }> = {
+  alone: { label: 'On my own', hint: 'Nobody is free' },
+  together: { label: 'With someone', hint: 'Someone can join' },
+  either: { label: 'Either', hint: 'Whatever fits' },
+}
+
+/** How they feel afterwards compared with before. */
+export const FEELING_LABELS: Record<Feeling, string> = {
+  calmer: 'Calmer',
+  more_energetic: 'More energetic',
+  happier: 'Happier',
+  same: 'About the same',
+  more_tired: 'More tired',
+}
+
+export const HELPER_LABELS: Record<Helper, string> = {
+  clear_plan: 'Having a plan',
+  company: 'Company',
+  music_or_podcast: 'Music or a podcast',
+  good_weather: 'Good weather',
+  kept_short: 'Keeping it short',
+  noticing_things: 'Noticing things',
+}
+
+export const WOULD_REPEAT_LABELS: Record<WouldRepeat, string> = { yes: 'Yes, again', maybe: 'Maybe', no: 'Not really' }
+
+export const PARTICIPATION_LABELS: Record<ParticipationStatus, string> = {
+  full: 'Did it',
+  partial: 'Part of it',
+  not_started: 'Did not go',
+  something_else: 'Did something else',
 }

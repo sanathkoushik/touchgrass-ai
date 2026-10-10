@@ -1,6 +1,6 @@
 import type { ContextResponse, Location, PlacesResponse } from '@/shared/context'
 import type { NearbyResponse } from '@/shared/places'
-import type { MeadowResponse } from '@/shared/api'
+import type { ExperimentResponse, LearnedResponse, MeadowResponse, MemoriesResponse, MemoryResponse, MetricsResponse, MissionsResponse } from '@/shared/api'
 import type {
   ApiErrorBody,
   FeedbackInput,
@@ -164,6 +164,21 @@ export const getNearby = (location: Location, activityId: string, signal?: Abort
 /** Everything the person has added up so far, from their own answers. */
 export const getMeadow = (signal?: AbortSignal) =>
   request<MeadowResponse>('GET', `/api/meadow?utc_offset_minutes=${-new Date().getTimezoneOffset()}`, { signal })
+
+const utcOffset = () => -new Date().getTimezoneOffset()
+
+/** What the assistant has noticed, plus the person's controls over it. */
+export const getLearned = (signal?: AbortSignal) => request<LearnedResponse>('GET', `/api/learned?utc_offset_minutes=${utcOffset()}`, { signal })
+export const respondToLearned = (id: string, action: 'confirm' | 'dismiss' | 'restore') => request<LearnedResponse>('POST', '/api/learned/respond', { body: { id, action } })
+/** "Start learning from scratch". Missions, memories and the meadow are untouched. */
+export const resetLearned = () => request<LearnedResponse>('DELETE', '/api/learned')
+
+export const getMemories = (limit = 60, signal?: AbortSignal) => request<MemoriesResponse>('GET', `/api/memories?limit=${limit}`, { signal })
+export const editMemory = (id: string, patch: { note?: string | null; feeling?: string | null; would_repeat?: string | null; has_photo?: boolean }) =>
+  request<MemoryResponse>('PATCH', `/api/memories/${encodeURIComponent(id)}`, { body: patch })
+export const getMissions = (limit = 200, signal?: AbortSignal) => request<MissionsResponse>('GET', `/api/missions?limit=${limit}`, { signal })
+export const getMetrics = (signal?: AbortSignal) => request<MetricsResponse>('GET', '/api/metrics', { signal })
+export type { ExperimentResponse }
 
 export const sendFeedback = (input: FeedbackInput) => request<FeedbackResponse>('POST', '/api/feedback', { body: input })
 export const getHistory = (limit = 30, signal?: AbortSignal) => request<HistoryResponse>('GET', `/api/history?limit=${limit}`, { signal })
