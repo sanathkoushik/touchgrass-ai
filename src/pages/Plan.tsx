@@ -6,6 +6,7 @@ import type { RecommendResponse } from '@/shared/api'
 import type { ActivityMode, Mood, SkipReason, SocialMode } from '@/shared/engine/types'
 import { ChoiceGroup } from '@/components/tg/ChoiceGroup'
 import { ContextPill } from '@/components/tg/ContextPill'
+import { GoingCard } from '@/components/tg/GoingCard'
 import { LocationPicker } from '@/components/tg/LocationPicker'
 import { MissionCard } from '@/components/tg/MissionCard'
 import { NearbyPlaces } from '@/components/tg/NearbyPlaces'
@@ -224,27 +225,7 @@ export default function Plan() {
         </div>
       )}
 
-      {phase.kind === 'going' && (
-        <MissionCard
-          title="Go. We will be here when you are back."
-          reason="Put the phone away. Nothing here needs you until you have done it."
-          firstStep={phase.rec.first_step}
-          meta={
-            <>
-              <ContextPill icon={Clock}>{phase.rec.duration_min} min</ContextPill>
-              <ContextPill>{phase.rec.title}</ContextPill>
-            </>
-          }
-          actions={
-            <>
-              <PrimaryAction onClick={() => navigate('/feedback')}>I am back</PrimaryAction>
-              <Button variant="ghost" onClick={reset}>
-                Choose something else
-              </Button>
-            </>
-          }
-        />
-      )}
+      {phase.kind === 'going' && <GoingCard rec={phase.rec} onBack={() => navigate('/feedback')} onChooseAnother={reset} />}
 
       {phase.kind === 'needs_profile' && (
         <div className="rounded-2xl border bg-card p-6">

@@ -10,6 +10,8 @@ type Props = {
   firstStep?: string
   /** What to have ready (may be empty). */
   preparation?: string[]
+  /** Extra content inside the card, after the first step and preparation (e.g. side quests). */
+  extra?: ReactNode
   /** Pills row: duration, social mode, weather... */
   meta?: ReactNode
   /** Primary action and fallback controls */
@@ -25,7 +27,7 @@ type Props = {
  * The dominant element on Home. Content is plain HTML/CSS; the spotlight is decorative
  * (aria-hidden, pointer-events-none) so the mission stays readable if the effect fails.
  */
-export function MissionCard({ title, reason, firstStep, preparation, meta, actions, transitionKey, busy, className }: Props) {
+export function MissionCard({ title, reason, firstStep, preparation, extra, meta, actions, transitionKey, busy, className }: Props) {
   const reduceMotion = useReducedMotion()
   return (
     <article
@@ -74,6 +76,7 @@ export function MissionCard({ title, reason, firstStep, preparation, meta, actio
             </ul>
           </div>
         )}
+        {extra}
       </m.div>
       {actions && <div className="mt-6 flex flex-wrap items-center gap-3">{actions}</div>}
     </article>

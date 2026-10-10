@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { HistoryItem, ProfileStats } from '@/shared/api'
 import { Button } from '@/components/ui/button'
-import { ApiError, getHistory, getProfile } from '@/lib/api'
+import type { MeadowResponse } from '@/shared/api'
+import { MeadowOverview } from '@/components/tg/MeadowOverview'
+import { ApiError, getHistory, getMeadow, getProfile } from '@/lib/api'
 import { summarizeLearning } from '@/lib/insights'
 import { cn } from '@/lib/utils'
 
@@ -38,9 +40,12 @@ export default function History() {
   const [items, setItems] = useState<HistoryItem[] | null>(null)
   const [stats, setStats] = useState<ProfileStats | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [meadow, setMeadow] = useState<MeadowResponse | null>(null)
 
   useEffect(() => {
     const ac = new AbortController()
+    // The meadow loads on its own: the rest of the page never waits for it, and never breaks if it is unavailable.
+    getMeadow(ac.signal).then(setMeadow).catch(() => {})
     getHistory(50, ac.signal)
       .then((r) => setItems(r.items))
       .catch((err: unknown) => {
@@ -70,8 +75,19 @@ export default function History() {
   return (
     <section className="space-y-8">
       <div>
-        <h1 className="font-display text-3xl font-medium tracking-tight">What actually worked</h1>
-        <p className="mt-2 text-muted-foreground">Only what you told us. No streaks, no scores to chase.</p>
+        <h1 className="font-display text-3xl font-medium tracking-tight">Your meadow</h1>
+        <p className="mt-2 text-muted-foreground">Grown from what you actually did. It never shrinks, and there is no streak to keep.</p>
+      </div>
+
+      {meadow ? (
+        <MeadowOverview summary={meadow} />
+      ) : (
+        <div aria-busy="true" aria-hidden="true" className="aspect-[2/1] animate-pulse rounded-2xl border bg-card sm:aspect-[5/2]" />
+      )}
+
+      <div>
+        <h2 className="font-display text-2xl font-medium tracking-tight">What actually worked</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Only what you told us.</p>
       </div>
 
       {error && (

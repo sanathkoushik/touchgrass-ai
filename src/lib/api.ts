@@ -1,5 +1,6 @@
 import type { ContextResponse, Location, PlacesResponse } from '@/shared/context'
 import type { NearbyResponse } from '@/shared/places'
+import type { MeadowResponse } from '@/shared/api'
 import type {
   ApiErrorBody,
   FeedbackInput,
@@ -158,6 +159,10 @@ export const searchPlaces = (q: string, signal?: AbortSignal) =>
 /** A few real places near the shared location for this activity (OpenStreetMap). Optional; never blocks the mission. */
 export const getNearby = (location: Location, activityId: string, signal?: AbortSignal) =>
   request<NearbyResponse>('POST', '/api/nearby', { body: { location, activity_id: activityId }, signal, timeoutMs: 9_000 })
+
+/** Everything the person has added up so far, from their own answers. */
+export const getMeadow = (signal?: AbortSignal) =>
+  request<MeadowResponse>('GET', `/api/meadow?utc_offset_minutes=${-new Date().getTimezoneOffset()}`, { signal })
 
 export const sendFeedback = (input: FeedbackInput) => request<FeedbackResponse>('POST', '/api/feedback', { body: input })
 export const getHistory = (limit = 30, signal?: AbortSignal) => request<HistoryResponse>('GET', `/api/history?limit=${limit}`, { signal })

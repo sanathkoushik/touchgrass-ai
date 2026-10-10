@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Compass, History, Home, ListChecks, Sprout } from 'lucide-react'
+import { Compass, Flower2, Home, ListChecks, Sprout } from 'lucide-react'
 import { MagneticDock } from '@/components/ui/magnetic-dock'
 import { cn } from '@/lib/utils'
 
@@ -7,7 +7,7 @@ const routes = [
   { id: 'home', to: '/', label: 'Home', Icon: Home },
   { id: 'plan', to: '/plan', label: 'Plan', Icon: Compass },
   { id: 'feedback', to: '/feedback', label: 'How it went', Icon: ListChecks },
-  { id: 'history', to: '/history', label: 'History', Icon: History },
+  { id: 'history', to: '/history', label: 'Your meadow', Icon: Flower2 },
   { id: 'onboarding', to: '/onboarding', label: 'Preferences', Icon: Sprout },
 ]
 

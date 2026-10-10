@@ -7,6 +7,7 @@ import type { ZodType } from 'zod'
 import {
   feedbackInputSchema,
   historyQuerySchema,
+  meadowQuerySchema,
   profileInputSchema,
   profilePatchSchema,
   recommendInputSchema,
@@ -26,6 +27,7 @@ import {
 import { chooseMode, getActivity, planDeterministic } from '@/shared/engine'
 import type { Context as EngineContext, HistoryEvent, UserProfile } from '@/shared/engine/types'
 import { contextInputSchema, placesInputSchema, roundLocation, type ConditionsSummary, type ContextResponse, type Location, type PlacesResponse } from '@/shared/context'
+import { computeMeadow, creditedMinutes, localDate, newMilestones, type MeadowEvent, type RewardSummary } from '@/shared/meadow'
 import { AiGate } from './ai/gate'
 import type { AiProvider } from './ai/provider'
 import { refineWithAi } from './ai/refine'
@@ -141,6 +143,19 @@ function toEngineProfile(userKey: string, p: StoredProfile): UserProfile {
     avoidances: p.avoidances,
     equipment: p.equipment,
     goals: p.goals ?? [],
+  }
+}
+
+/** What the Meadow needs from a stored event. */
+function toMeadowEvent(e: StoredEvent): MeadowEvent {
+  return {
+    activity_id: e.activity_id,
+    timestamp: e.timestamp,
+    outcome: e.outcome,
+    ...(e.enjoyment !== undefined ? { enjoyment: e.enjoyment } : {}),
+    ...(e.minutes_outside !== undefined ? { minutes_outside: e.minutes_outside } : {}),
+    ...(e.quests_done !== undefined ? { quests_done: e.quests_done } : {}),
+    ...(e.context.planned_min !== undefined ? { planned_min: e.context.planned_min } : {}),
   }
 }
 
@@ -369,6 +384,7 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
           mood: ctx.mood,
           social_available: ctx.social_available,
           hour: ctx.hour,
+          planned_min: recommendation.duration_min,
           ...(ctx.mode ? { mode: ctx.mode } : {}),
           ...(ctx.mode_cause ? { mode_cause: ctx.mode_cause } : {}),
           ...(ctx.weather ? { weather: ctx.weather } : {}),
@@ -451,7 +467,7 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
       await repo.updateEvent(userKey, {
         ...event,
         activity_id: ok ? refined.recommendation.activity_id : event.activity_id,
-        context: { ...event.context, upgrade: ok ? 'ai' : 'failed' },
+        context: { ...event.context, upgrade: ok ? 'ai' : 'failed', ...(ok ? { planned_min: refined.recommendation.duration_min } : {}) },
       })
     } catch (err) {
       // If we cannot save the upgraded choice, do not show it: the screen and the record must agree.
@@ -480,8 +496,18 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
     const updated: StoredEvent = { ...event, outcome: input.outcome, responded_at: now().toISOString() }
     delete updated.enjoyment
     delete updated.skip_reason
+    delete updated.minutes_outside
+    delete updated.quests_done
     if (input.enjoyment !== undefined) updated.enjoyment = input.enjoyment
     if (input.skip_reason !== undefined) updated.skip_reason = input.skip_reason
+    if (input.minutes_outside !== undefined) updated.minutes_outside = input.minutes_outside
+    if (input.quests_done !== undefined) updated.quests_done = input.quests_done
+
+    // What the Meadow looked like before this answer (this mission as it was stored), so only genuinely new
+    // milestones are celebrated, and answering the same mission twice never celebrates twice.
+    const credited = updated.outcome === 'completed' || updated.outcome === 'partial'
+    const others = credited ? (await repo.listCredited(userKey, 2000)).filter((e) => e.recommendation_id !== updated.recommendation_id) : []
+    const wasCredited = event.outcome === 'completed' || event.outcome === 'partial'
     await repo.updateEvent(userKey, updated)
 
     const body: FeedbackResponse = {
@@ -490,7 +516,29 @@ export function createApp({ repo: repoSource, now = () => new Date(), ai, contex
       enjoyment: updated.enjoyment ?? null,
       skip_reason: updated.skip_reason ?? null,
     }
+    if (credited) {
+      const before = [...others.map(toMeadowEvent), ...(wasCredited ? [toMeadowEvent(event)] : [])]
+      const after = [...others.map(toMeadowEvent), toMeadowEvent(updated)]
+      const summary = computeMeadow(after, '1970-01-01') // totals only; the date matters for the weekly view, not here
+      const reward: RewardSummary = {
+        credited_minutes: creditedMinutes(toMeadowEvent(updated)),
+        total_minutes: summary.total_minutes,
+        missions: summary.missions,
+        quests_done: summary.quests_done,
+        new_milestones: newMilestones(before, after),
+      }
+      body.reward = reward
+    }
     return c.json(body)
+  })
+
+  // ---- meadow: everything the person has added up so far, from their own answers
+  app.get('/api/meadow', validate('query', meadowQuerySchema), async (c) => {
+    const repo = repoOf(c)
+    const at = now()
+    const offset = resolveOffsetMinutes(c, c.req.valid('query').utc_offset_minutes, at)
+    const credited = await repo.listCredited(c.get('userKey'), 2000)
+    return c.json(computeMeadow(credited.map(toMeadowEvent), localDate(at, offset)))
   })
 
   // ---- history: recent recommendations and outcomes

@@ -262,6 +262,7 @@ describe.each(STORAGE_KINDS)('API on %s storage', (kind) => {
         getEvent: (k, id) => base.getEvent(k, id),
         updateEvent: (k, e) => base.updateEvent(k, e),
         listEvents: (k, n) => base.listEvents(k, n),
+        listCredited: (k, n) => base.listCredited(k, n),
       }
       const { call } = setup({ repo: flaky })
       await onboard(call)
@@ -281,6 +282,7 @@ describe.each(STORAGE_KINDS)('API on %s storage', (kind) => {
         getEvent: (k, id) => base.getEvent(k, id),
         updateEvent: (k, e) => base.updateEvent(k, e),
         listEvents: (k, n) => base.listEvents(k, n),
+        listCredited: (k, n) => base.listCredited(k, n),
       }
       const { call } = setup({ repo: broken })
       const r = await call<ApiErrorBody>('POST', '/api/recommend', { body: { duration_limit: 60 } })

@@ -30,7 +30,7 @@ What is the best next real-world action for THIS person, at THIS time, under THE
 - No automatic phone blocking.
 - No custom model fine-tuning.
 - No giant maps/search system. (Stage 10 adds only a short optional list of real nearby place names from OpenStreetMap, once the core loop was useful without it: see DECISIONS 007.)
-- No streaks/points/badge gamification.
+- No streaks, points or levels. (Stage 12 adds a growing Meadow and earned-once milestones instead: nothing is ever lost, see DECISIONS 009.)
 - No paid services or Pro-only UI components.
 
 ## Acceptance test (Phase 0)

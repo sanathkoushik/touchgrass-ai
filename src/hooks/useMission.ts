@@ -103,7 +103,8 @@ export function useMission() {
     const current = phaseRef.current
     if (current.kind !== 'shown') return
     abortRef.current?.abort()
-    saveMission({ recommendation: current.rec, stage: 'going', shownAt: Date.now() })
+    // "wentAt" starts the clock on time away from the app; the Meadow credits that time honestly.
+    saveMission({ recommendation: current.rec, stage: 'going', shownAt: Date.now(), wentAt: Date.now(), questsTicked: [] })
     setPhase({ kind: 'going', rec: current.rec })
   }, [])
 

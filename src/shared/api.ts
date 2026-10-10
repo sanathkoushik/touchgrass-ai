@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { locationSchema, type ConditionsSummary } from './context'
+import type { MeadowSummary, RewardSummary } from './meadow'
 import {
   ACTIVITY_MODES,
   GOALS,
@@ -151,8 +152,16 @@ export const feedbackInputSchema = z
     outcome: z.enum(OUTCOMES),
     enjoyment: z.int().min(1).max(5).optional(),
     skip_reason: z.enum(SKIP_REASONS).optional(),
+    /** Minutes away from the app (measured from "Let's go" to "I am back", or what the person said). */
+    minutes_outside: z.int().min(0).max(480).optional(),
+    /** How many of the mission's side quests were ticked off. */
+    quests_done: z.int().min(0).max(3).optional(),
   })
   .superRefine((v, ctx) => {
+    const credited = v.outcome === 'completed' || v.outcome === 'partial'
+    for (const key of ['minutes_outside', 'quests_done'] as const) {
+      if (v[key] !== undefined && !credited) ctx.addIssue({ code: 'custom', path: [key], message: `${key} only applies to completed or partial` })
+    }
     if (v.enjoyment !== undefined && v.outcome !== 'completed' && v.outcome !== 'partial') {
       ctx.addIssue({ code: 'custom', path: ['enjoyment'], message: 'enjoyment only applies to completed or partial' })
     }
@@ -167,7 +176,18 @@ export interface FeedbackResponse {
   outcome: Outcome
   enjoyment: number | null
   skip_reason: SkipReason | null
+  /** Present for completed or partial missions: what this one added to the meadow. */
+  reward?: RewardSummary
 }
+
+// ---------------------------------------------------------------- meadow
+
+export const meadowQuerySchema = z.object({
+  /** Minutes east of UTC for the person's clock, so "this week" starts and ends in their own time. */
+  utc_offset_minutes: z.coerce.number().int().min(-840).max(840).optional(),
+})
+
+export type MeadowResponse = MeadowSummary
 
 // ---------------------------------------------------------------- history
 

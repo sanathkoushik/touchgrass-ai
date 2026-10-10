@@ -12,11 +12,17 @@ export interface StoredEvent {
   skip_reason?: SkipReason
   /** UTC ISO time when the user reported the outcome. */
   responded_at?: string
+  /** Minutes away from the app for this mission (measured, or as the person said). */
+  minutes_outside?: number
+  /** Side quests ticked off during this mission. */
+  quests_done?: number
   context: {
     duration_limit: number
     mood: Mood
     social_available: boolean
     hour: number
+    /** Minutes the app planned, so time outside can be credited honestly later. */
+    planned_min?: number
     /** How big this recommendation was, and why, so the AI upgrade rebuilds the same situation. */
     mode?: ActivityMode
     mode_cause?: ModeCause
@@ -48,6 +54,11 @@ export interface Repository {
   updateEvent(userKey: string, event: StoredEvent): Promise<void>
   /** Newest first. */
   listEvents(userKey: string, limit: number): Promise<StoredEvent[]>
+  /**
+   * Newest first: only completed and partial missions, of ANY age. These are never pruned, because the Meadow
+   * (time outside, milestones) is built from them and must never shrink.
+   */
+  listCredited(userKey: string, limit: number): Promise<StoredEvent[]>
 }
 
 const MAX_EVENTS_PER_USER = 500
@@ -76,8 +87,11 @@ export class MemoryRepository implements Repository {
     // Same rule as the database primary key (user_key, recommendation_id).
     if (list.some((x) => x.recommendation_id === event.recommendation_id)) throw new Error('duplicate recommendation id')
     list.push(structuredClone(event))
-    // Bound memory: drop the oldest events beyond the cap.
-    if (list.length > MAX_EVENTS_PER_USER) list.splice(0, list.length - MAX_EVENTS_PER_USER)
+    // Bound memory: drop the oldest events beyond the cap, but keep completed/partial ones (the Meadow is built from them).
+    while (list.length > MAX_EVENTS_PER_USER) {
+      const i = list.findIndex((x) => x.outcome !== 'completed' && x.outcome !== 'partial')
+      list.splice(i === -1 ? 0 : i, 1)
+    }
     this.events.set(userKey, list)
   }
 
@@ -95,6 +109,11 @@ export class MemoryRepository implements Repository {
 
   async listEvents(userKey: string, limit: number) {
     const list = this.events.get(userKey) ?? []
+    return structuredClone(list.slice(-limit).reverse())
+  }
+
+  async listCredited(userKey: string, limit: number) {
+    const list = (this.events.get(userKey) ?? []).filter((e) => e.outcome === 'completed' || e.outcome === 'partial')
     return structuredClone(list.slice(-limit).reverse())
   }
 }

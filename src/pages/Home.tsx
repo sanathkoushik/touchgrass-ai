@@ -4,7 +4,8 @@ import { DockNav } from '@/components/DockNav'
 import { PrimaryAction } from '@/components/tg/PrimaryAction'
 import { ScrollBasedVelocity } from '@/components/ui/scroll-based-velocity'
 import { getProfile } from '@/lib/api'
-import { hasProfileHint, setProfileHint } from '@/lib/mission-store'
+import { awayText } from '@/lib/away'
+import { hasProfileHint, loadMission, minutesAway, setProfileHint } from '@/lib/mission-store'
 
 // Loaded after first paint: the headline and button never wait for the photos.
 const InfiniteImageField = lazy(() =>
@@ -23,6 +24,11 @@ export default function Home() {
   const [compact] = useState(() => window.matchMedia('(max-width: 639px)').matches)
   // The button is right straight away from a cached hint; the server then confirms in the background.
   const [hasProfile, setHasProfile] = useState(hasProfileHint)
+  // Set off on a mission and not reported back yet? Then the button is "I am back", not "Plan".
+  const [going] = useState(() => {
+    const m = loadMission()
+    return m?.stage === 'going' ? { text: awayText(minutesAway(m)) } : null
+  })
   useEffect(() => {
     const ac = new AbortController()
     getProfile(ac.signal)
@@ -80,9 +86,13 @@ export default function Home() {
             One real-world mission at a time, picked for you. Then you put the phone down.
           </p>
           <div className="mt-8 flex justify-center">
-            <PrimaryAction onClick={() => navigate(hasProfile ? '/plan' : '/onboarding')}>
-              {hasProfile ? 'Plan my next hour' : 'Get started'}
-            </PrimaryAction>
+            <div className="relative">
+              <PrimaryAction onClick={() => navigate(going ? '/feedback' : hasProfile ? '/plan' : '/onboarding')}>
+                {going ? 'I am back' : hasProfile ? 'Plan my next hour' : 'Get started'}
+              </PrimaryAction>
+              {/* Out of the flow on purpose: the headline must not move when this appears (it matches the first-paint shell). */}
+              {going?.text && <p className="absolute top-full left-1/2 mt-3 -translate-x-1/2 text-sm whitespace-nowrap text-muted-foreground">{going.text}</p>}
+            </div>
           </div>
         </main>
       </section>

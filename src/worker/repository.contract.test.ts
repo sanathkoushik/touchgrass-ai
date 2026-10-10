@@ -187,6 +187,19 @@ describe.each(STORAGE_KINDS)('Repository contract: %s', (kind) => {
       expect((await later.listEvents(U2, 10)).map((e) => e.recommendation_id)).toEqual(['r_other-old'])
     })
 
+    it('NEVER prunes completed or partial missions, however old (the Meadow must not shrink)', async () => {
+      const t0 = 1_800_000_000_000
+      const early = h.create(() => t0)
+      await early.addEvent(U1, event('done', { outcome: 'completed' }))
+      await early.addEvent(U1, event('part', { outcome: 'partial' }))
+      await early.addEvent(U1, event('skip', { outcome: 'skipped' }))
+      const later = h.create(() => t0 + 400 * DAY)
+      await later.addEvent(U1, event('fresh'))
+      const ids = (await later.listEvents(U1, 10)).map((e) => e.recommendation_id).sort()
+      expect(ids).toEqual(['r_done', 'r_fresh', 'r_part'])
+      expect((await later.listCredited(U1, 10)).map((e) => e.recommendation_id).sort()).toEqual(['r_done', 'r_part'])
+    })
+
     it('keeps events younger than 180 days', async () => {
       const t0 = 1_800_000_000_000
       await h.create(() => t0).addEvent(U1, event('a'))
@@ -196,7 +209,50 @@ describe.each(STORAGE_KINDS)('Repository contract: %s', (kind) => {
     })
   })
 
+  describe('credited missions (the Meadow)', () => {
+    it('lists only completed and partial missions, newest first, whatever else was recorded', async () => {
+      await repo.addEvent(U1, event('a', { outcome: 'completed' }))
+      await repo.addEvent(U1, event('b', { outcome: 'skipped' }))
+      await repo.addEvent(U1, event('c', { outcome: 'partial' }))
+      await repo.addEvent(U1, event('d', { outcome: 'pending' }))
+      await repo.addEvent(U1, event('e', { outcome: 'changed' }))
+      expect((await repo.listCredited(U1, 10)).map((e) => e.recommendation_id)).toEqual(['r_c', 'r_a'])
+      expect(await repo.listCredited(U2, 10)).toEqual([])
+    })
+
+    it('respects the limit and keeps newest first', async () => {
+      for (const id of ['1', '2', '3']) await repo.addEvent(U1, event(id, { outcome: 'completed' }))
+      expect((await repo.listCredited(U1, 2)).map((e) => e.recommendation_id)).toEqual(['r_3', 'r_2'])
+    })
+
+    it('stores and returns minutes outside and side quests, and leaves them absent when unknown', async () => {
+      await repo.addEvent(U1, event('x'))
+      const before = await repo.getEvent(U1, 'r_x')
+      expect(before).not.toHaveProperty('minutes_outside')
+      expect(before).not.toHaveProperty('quests_done')
+      await repo.updateEvent(U1, { ...before!, outcome: 'completed', minutes_outside: 37, quests_done: 2, context: { ...before!.context, planned_min: 40 } })
+      const after = await repo.getEvent(U1, 'r_x')
+      expect(after).toMatchObject({ minutes_outside: 37, quests_done: 2, context: { planned_min: 40 } })
+      expect((await repo.listCredited(U1, 5))[0]).toMatchObject({ minutes_outside: 37, quests_done: 2 })
+    })
+
+    it('can record zero minutes and zero quests (0 is a value, not "missing")', async () => {
+      await repo.addEvent(U1, event('z'))
+      const e = (await repo.getEvent(U1, 'r_z'))!
+      await repo.updateEvent(U1, { ...e, outcome: 'partial', minutes_outside: 0, quests_done: 0 })
+      expect(await repo.getEvent(U1, 'r_z')).toMatchObject({ minutes_outside: 0, quests_done: 0 })
+    })
+  })
+
   describe.runIf(kind === 'd1')('schema guards (D1)', () => {
+    it('refuses out-of-range minutes or quests at the database level', async () => {
+      await repo.addEvent(U1, event('m'))
+      const e = (await repo.getEvent(U1, 'r_m'))!
+      await expect(repo.updateEvent(U1, { ...e, minutes_outside: 9999 })).rejects.toThrow()
+      await expect(repo.updateEvent(U1, { ...e, quests_done: 9 })).rejects.toThrow()
+      await expect(repo.updateEvent(U1, { ...e, minutes_outside: -1 })).rejects.toThrow()
+    })
+
     it('refuses an invalid outcome or out-of-range enjoyment at the database level', async () => {
       await expect(repo.addEvent(U1, event('1', { outcome: 'abandoned' as never }))).rejects.toThrow()
       await expect(repo.addEvent(U1, event('2', { outcome: 'completed', enjoyment: 9 }))).rejects.toThrow()

@@ -115,3 +115,9 @@ All optional. A location is only ever sent with the person's consent, is rounded
 
 - `GET /api/profile` answers `200 { "profile": null }` when there is no profile yet (a normal first-visit state), instead of a 404. `PATCH /api/profile` and `POST /api/recommend` still answer 404 `profile_not_found`.
 - Any storage failure answers `503 { error: { code: "storage_unavailable" } }` (never a raw 500). `POST /api/recommend` accepts `fallback_profile` (same shape as onboarding): used only when saved data is unreachable, in which case the response has `persisted: false`.
+
+## Stage 12: the Meadow
+
+- `POST /api/feedback` accepts `minutes_outside` (0-480) and `quests_done` (0-3), only for completed or partial. For those outcomes the response carries `reward: { credited_minutes, total_minutes, missions, quests_done, new_milestones[] }`; a milestone appears in `new_milestones` only the first time it is earned.
+- `GET /api/meadow?utc_offset_minutes=330` -> total minutes, missions, side quests, minutes by kind, one flower per mission, the last 7 local days, all milestones (with when they were earned and progress), the nearest next milestone, and a favourite activity (after two of the same).
+- Run `npm run db:migrate:local` (dev) and `npm run db:migrate:remote` (before deploying): migration 0003 is required or every data route answers 503.

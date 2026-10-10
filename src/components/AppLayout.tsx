@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { Outlet } from 'react-router-dom'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { DockNav } from '@/components/DockNav'
+import { ReturnBanner } from '@/components/ReturnBanner'
 
 export function AppLayout() {
   return (
@@ -14,6 +15,7 @@ export function AppLayout() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pt-8 pb-32">
+        <ReturnBanner />
         <ErrorBoundary>
           <Suspense fallback={<div aria-hidden="true" className="min-h-[24rem]" />}>
             <Outlet />

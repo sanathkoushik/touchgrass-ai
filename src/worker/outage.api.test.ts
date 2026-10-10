@@ -25,7 +25,7 @@ const PROFILE = {
 /** A repository whose every call fails like an unreachable database, with a secret in the message. */
 function downRepo(): Repository {
   const fail = () => Promise.reject(new Error('D1_ERROR: connect ECONNRESET db.internal.example password=hunter2'))
-  return { getProfile: fail, saveProfile: fail, deleteUser: fail, addEvent: fail, getEvent: fail, updateEvent: fail, listEvents: fail }
+  return { getProfile: fail, saveProfile: fail, deleteUser: fail, addEvent: fail, getEvent: fail, updateEvent: fail, listEvents: fail, listCredited: fail }
 }
 
 function setup(opts: { repo?: Repository; ai?: AiProvider; context?: ContextProvider } = {}) {
@@ -63,6 +63,7 @@ describe('database outage', () => {
       ['POST', '/api/recommend/r_00000000-0000-4000-8000-000000000001/upgrade'],
       ['POST', '/api/feedback', { recommendation_id: 'r_00000000-0000-4000-8000-000000000001', outcome: 'completed' }],
       ['GET', '/api/history'],
+      ['GET', '/api/meadow'],
     ]
     for (const [method, path, body] of calls) {
       const r = await s.call<ApiErrorBody>(method, path, body)

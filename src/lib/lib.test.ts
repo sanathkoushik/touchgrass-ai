@@ -261,3 +261,47 @@ describe('mission store', () => {
     expect(hasProfileHint()).toBe(false)
   })
 })
+
+describe('mission clock and side-quest ticks', () => {
+  const REC_ID_2 = 'r_11111111-2222-4333-8444-555555555555'
+  const rec = { ...MISSION, recommendation_id: REC_ID_2 }
+
+  beforeEach(() => vi.stubGlobal('localStorage', fakeStorage()))
+
+  it('remembers when they set off and which quests they ticked, across reloads', async () => {
+    const { setQuestTicked } = await import('./mission-store')
+    saveMission({ recommendation: rec, stage: 'going', shownAt: 1, wentAt: 1_000_000, questsTicked: [] })
+    expect(setQuestTicked(1, true)).toEqual([false, true])
+    expect(loadMission()).toMatchObject({ stage: 'going', wentAt: 1_000_000, questsTicked: [false, true] })
+    expect(setQuestTicked(0, true)).toEqual([true, true])
+    expect(setQuestTicked(1, false)).toEqual([true, false])
+  })
+
+  it('ignores quest ticks when there is no mission, or an impossible position', async () => {
+    const { setQuestTicked } = await import('./mission-store')
+    expect(setQuestTicked(0, true)).toEqual([])
+    saveMission({ recommendation: rec, stage: 'going', shownAt: 1, wentAt: 5 })
+    expect(setQuestTicked(-1, true)).toEqual([])
+    expect(setQuestTicked(3, true)).toEqual([])
+  })
+
+  it('measures minutes away sensibly: whole, never negative, never silly-large', async () => {
+    const { minutesAway } = await import('./mission-store')
+    expect(minutesAway(null)).toBeNull()
+    expect(minutesAway({})).toBeNull()
+    expect(minutesAway({ wentAt: 1_000_000 }, 1_000_000 + 41 * 60_000 + 20_000)).toBe(41)
+    expect(minutesAway({ wentAt: 1_000_000 }, 1_000_000 - 60_000)).toBe(0) // a clock that moved back
+    expect(minutesAway({ wentAt: 1_000_000 }, 1_000_000 + 99 * 24 * 3_600_000)).toBe(24 * 60)
+  })
+
+  it('drops a corrupt clock or tick list instead of trusting it', () => {
+    localStorage.setItem('tg_mission', JSON.stringify({ recommendation: rec, stage: 'going', shownAt: 1, wentAt: 'yesterday', questsTicked: 'all' }))
+    const m = loadMission()!
+    expect(m.wentAt).toBeUndefined()
+    expect(m.questsTicked).toBeUndefined()
+    localStorage.setItem('tg_mission', JSON.stringify({ recommendation: rec, stage: 'going', shownAt: 1, wentAt: -5, questsTicked: [true, 'x', 1, true, true] }))
+    const n = loadMission()!
+    expect(n.wentAt).toBeUndefined()
+    expect(n.questsTicked).toEqual([true, false, false]) // only real booleans count, and at most three
+  })
+})

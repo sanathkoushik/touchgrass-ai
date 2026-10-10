@@ -145,3 +145,40 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ---- The meadow (src/components/tg/Meadow.tsx): only transforms, so it stays smooth. */
+@keyframes meadow-sway {
+  0%,
+  100% {
+    transform: rotate(-1.3deg);
+  }
+  50% {
+    transform: rotate(1.3deg);
+  }
+}
+@keyframes meadow-grow {
+  from {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.meadow-sway {
+  transform-box: view-box;
+  transform-origin: 50% 100%;
+  animation: meadow-sway 6s ease-in-out infinite;
+}
+.meadow-grow {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: meadow-grow 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .meadow-sway,
+  .meadow-grow {
+    animation: none;
+  }
+}

@@ -14,6 +14,10 @@ export interface StoredMission {
   stage: 'shown' | 'going'
   /** Epoch ms when it was first shown. */
   shownAt: number
+  /** Epoch ms when they tapped "Let's go". The time since then is the time they were away from the app. */
+  wentAt?: number
+  /** Which side quests they have ticked off so far (by position). */
+  questsTicked?: boolean[]
 }
 
 export function loadMission(): StoredMission | null {
@@ -25,7 +29,15 @@ export function loadMission(): StoredMission | null {
     if (!r || typeof r.recommendation_id !== 'string' || !ID.test(r.recommendation_id)) return null
     if (m.stage !== 'shown' && m.stage !== 'going') return null
     if (typeof r.title !== 'string' || typeof r.first_step !== 'string' || typeof r.reason !== 'string') return null
-    return { recommendation: r, stage: m.stage, shownAt: typeof m.shownAt === 'number' ? m.shownAt : Date.now() }
+    const wentAt = typeof m.wentAt === 'number' && Number.isFinite(m.wentAt) && m.wentAt > 0 ? m.wentAt : undefined
+    const questsTicked = Array.isArray(m.questsTicked) ? m.questsTicked.slice(0, 3).map((x) => x === true) : undefined
+    return {
+      recommendation: r,
+      stage: m.stage,
+      shownAt: typeof m.shownAt === 'number' ? m.shownAt : Date.now(),
+      ...(wentAt !== undefined ? { wentAt } : {}),
+      ...(questsTicked ? { questsTicked } : {}),
+    }
   } catch {
     return null
   }
@@ -37,6 +49,24 @@ export function saveMission(mission: StoredMission): void {
   } catch {
     /* storage unavailable: the mission still works for this visit */
   }
+}
+
+/** Ticks or unticks one side quest of the current mission. Does nothing if there is no mission. */
+export function setQuestTicked(index: number, ticked: boolean): boolean[] {
+  const m = loadMission()
+  if (!m || index < 0 || index > 2) return []
+  const next = [...(m.questsTicked ?? [])]
+  while (next.length <= index) next.push(false)
+  next[index] = ticked
+  saveMission({ ...m, questsTicked: next })
+  return next
+}
+
+/** Whole minutes since they set off, or null if we do not know when that was. Never negative, never silly-large. */
+export function minutesAway(m: Pick<StoredMission, 'wentAt'> | null, now: number = Date.now()): number | null {
+  if (!m?.wentAt) return null
+  const minutes = Math.round((now - m.wentAt) / 60_000)
+  return Math.max(0, Math.min(minutes, 24 * 60))
 }
 
 export function clearMission(): void {

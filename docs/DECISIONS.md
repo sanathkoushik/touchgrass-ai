@@ -159,3 +159,19 @@ Failure drills (all automated, plus real-browser checks):
 - **AI overloaded or hung**: engine pick within the time budget. Found and fixed a real hang: the deadline was only enforced by providers; `refine` now enforces it too.
 - **Weather down**: planning continues without weather. **All three down at once**: still a real recommendation.
 - Deferred to Phase 12: per-client rate limiting (needs the Cloudflare rate-limit binding) and Sentry.
+
+## 009 - The Meadow: a reward system without streaks (user-requested, 2026-10-11)
+The report lists "no streaks/points/badge gamification" as a non-goal and "time spent in the app" as the anti-metric. The product owner asked for a way to make people feel good about what they did and keep coming back. We chose the one design that serves that without the usual harms, and recorded the deviation here.
+
+What it is:
+- **The Meadow**: a picture that grows with the minutes the person really spent outside (blades of grass), plus one flower per mission by kind. It never wilts, nothing is ever taken away, skipping a day costs nothing. There is no streak, no points, no levels, no leaderboard, no timer pressure.
+- **Honest numbers.** Minutes come from the clock between "Let's go" and "I am back" (the person can correct it). Credit is capped at 1.5x the plan (at least 15 min) so a forgotten phone cannot inflate anything. A skip or a swap adds nothing but never subtracts. The app cannot see device screen time (browsers do not expose it), so it says "outside", not "away from the screen".
+- **13 milestones**, earned once and kept (first step, 1 h / 5 h / 24 h outside, 10 / 25 missions, a bit of everything, five different things, early start, an evening outside, welcome back after 7+ days, 10 side quests, three 5/5 ratings). Each is computed from real answers and shown with the day it was earned. "Welcome back" rewards RETURNING after a break (no catching up).
+- **Side quests** (the report's scavenger/photo challenges): two small things to look for during a mission, chosen deterministically from the mission id (the same two after a reload or offline). They make the person a participant while they are out, instead of waiting for it to end.
+- **Coming back**: if the person leaves mid-mission and reopens the app, Home says "I am back" with how long ago they set off, and a quiet banner on other pages does the same. No push notifications, no sounds, no nagging.
+- **Celebration** after a mission: a count-up of the minutes added, the meadow growing, new milestones, and the next goal. Reduced-motion users get the same screen without the animation.
+- **This week**: the last seven days as bars, with "X more than last week" shown ONLY when it is true and positive. A quiet week says "A fresh week. Nothing to catch up on."
+
+Storage: migration 0003 adds `minutes_outside` and `quests_done` to events; the planned minutes are stored in the event context. Completed and partial missions are never pruned (the 180-day retention now only removes skipped, swapped and unanswered events), so the meadow cannot shrink as time passes. A person can still correct their own answer (change "did it" to "skipped") and "Delete my data" removes everything.
+
+Why not streaks: they reward opening the app and punish a missed day, which teaches people to tap "done" to keep a number alive and to quit the day it breaks. That works against the product's real goal (people choosing the real world), and against "never optimize time in the app".

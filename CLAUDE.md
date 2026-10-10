@@ -82,3 +82,12 @@ Product: an AI agent that learns what gets a person outside. See docs/MVP.md. Su
 - Measure before and after any performance change (Lighthouse on `npm run preview`). Default mobile profile plus a slow-3G run (`--throttling.rttMs=400 --throttling.throughputKbps=400 --throttling.cpuSlowdownMultiplier=4`).
 - Every failure must degrade to a real recommendation: storage -> 503 + `fallback_profile`; server unreachable -> on-device plan (`lib/local-plan.ts`); AI -> engine; weather and places -> omitted. Test any new dependency's outage in `outage.api.test.ts`.
 - Stop your own dev and preview servers before `npm run build`: a running `wrangler dev` over `dist` locks files and the build fails with EPERM.
+
+## The Meadow (Stage 12: src/shared/meadow.ts, quests.ts, components/tg/Meadow*.tsx, Celebration, GoingCard)
+- This is the app's only reward system and it is deliberately NOT a streak/points system. Never add streaks, points, levels, countdowns, loss-aversion ("you will lose..."), leaderboards or notifications. Nothing in the Meadow may ever decrease because of time passing.
+- Every number shown must come from the person's own answers (`creditedMinutes` is the one definition of "time outside"; do not re-derive it elsewhere). Say "outside", never "away from the screen" (we cannot measure screen time).
+- Milestones are pure functions of the credited events; add a new one in `DEFS` with a test that it can be earned, a wording entry in `remainingText`, and keep descriptions guilt-free.
+- Completed and partial events are never pruned (D1 retention only removes other outcomes). Keep it that way or the meadow shrinks.
+- The meadow layout is deterministic and prefix-stable (blade N never moves): do not change `blade()`/`flower()` math without accepting that every user's meadow reshuffles.
+- Home is in the main bundle: only import light modules into it (`lib/away.ts`, not GoingCard).
+- Migrations so far: 0001 init, 0002 place_cache, 0003 meadow.

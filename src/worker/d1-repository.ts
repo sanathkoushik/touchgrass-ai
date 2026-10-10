@@ -15,10 +15,13 @@ interface EventRow {
   enjoyment: number | null
   skip_reason: SkipReason | null
   responded_at: string | null
+  minutes_outside: number | null
+  quests_done: number | null
   context: string
 }
 
-const EVENT_COLUMNS = 'recommendation_id, activity_id, timestamp, outcome, enjoyment, skip_reason, responded_at, context'
+const EVENT_COLUMNS =
+  'recommendation_id, activity_id, timestamp, outcome, enjoyment, skip_reason, responded_at, minutes_outside, quests_done, context'
 
 function rowToEvent(row: EventRow): StoredEvent {
   const event: StoredEvent = {
@@ -31,6 +34,8 @@ function rowToEvent(row: EventRow): StoredEvent {
   if (row.enjoyment !== null) event.enjoyment = row.enjoyment
   if (row.skip_reason !== null) event.skip_reason = row.skip_reason
   if (row.responded_at !== null) event.responded_at = row.responded_at
+  if (row.minutes_outside !== null) event.minutes_outside = row.minutes_outside
+  if (row.quests_done !== null) event.quests_done = row.quests_done
   return event
 }
 
@@ -91,8 +96,11 @@ export class D1Repository implements Repository {
           event.responded_at ?? null,
           JSON.stringify(event.context),
         ),
-      // Uses idx_events_user_created: reads only the rows it deletes.
-      this.db.prepare('DELETE FROM events WHERE user_key = ? AND created_at < ?').bind(userKey, now - RETENTION_DAYS * DAY_MS),
+      // Uses idx_events_user_created: reads only the rows it deletes. Completed and partial missions are KEPT: the
+      // Meadow (time outside, milestones) is built from them and must never shrink as time passes.
+      this.db
+        .prepare("DELETE FROM events WHERE user_key = ? AND created_at < ? AND outcome NOT IN ('completed', 'partial')")
+        .bind(userKey, now - RETENTION_DAYS * DAY_MS),
     ])
   }
 
@@ -107,7 +115,7 @@ export class D1Repository implements Repository {
   async updateEvent(userKey: string, event: StoredEvent): Promise<void> {
     const result = await this.db
       .prepare(
-        `UPDATE events SET activity_id = ?, outcome = ?, enjoyment = ?, skip_reason = ?, responded_at = ?, context = ?
+        `UPDATE events SET activity_id = ?, outcome = ?, enjoyment = ?, skip_reason = ?, responded_at = ?, minutes_outside = ?, quests_done = ?, context = ?
          WHERE user_key = ? AND recommendation_id = ?`,
       )
       .bind(
@@ -116,6 +124,8 @@ export class D1Repository implements Repository {
         event.enjoyment ?? null,
         event.skip_reason ?? null,
         event.responded_at ?? null,
+        event.minutes_outside ?? null,
+        event.quests_done ?? null,
         JSON.stringify(event.context),
         userKey,
         event.recommendation_id,
@@ -128,6 +138,17 @@ export class D1Repository implements Repository {
     const { results } = await this.db
       .prepare(
         `SELECT ${EVENT_COLUMNS} FROM events WHERE user_key = ?
+         ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+      )
+      .bind(userKey, limit)
+      .all<EventRow>()
+    return results.map(rowToEvent)
+  }
+
+  async listCredited(userKey: string, limit: number): Promise<StoredEvent[]> {
+    const { results } = await this.db
+      .prepare(
+        `SELECT ${EVENT_COLUMNS} FROM events WHERE user_key = ? AND outcome IN ('completed', 'partial')
          ORDER BY created_at DESC, rowid DESC LIMIT ?`,
       )
       .bind(userKey, limit)

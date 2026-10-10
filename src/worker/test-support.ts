@@ -1,5 +1,6 @@
 import { getPlatformProxy } from 'wrangler'
 import initSql from '../../migrations/0001_init.sql?raw'
+import meadowSql from '../../migrations/0003_meadow.sql?raw'
 import { D1Repository } from './d1-repository'
 import { MemoryRepository, type Repository } from './repository'
 
@@ -49,7 +50,7 @@ export async function makeHarness(kind: StorageKind): Promise<Harness> {
   // The real `DB` binding from wrangler.jsonc, backed by an ephemeral (in-memory) local D1 database.
   const proxy = await getPlatformProxy<Env>({ persist: false })
   const db = proxy.env.DB
-  for (const stmt of statementsOf(initSql)) await db.prepare(stmt).run()
+  for (const stmt of [...statementsOf(initSql), ...statementsOf(meadowSql)]) await db.prepare(stmt).run()
 
   return {
     kind,
